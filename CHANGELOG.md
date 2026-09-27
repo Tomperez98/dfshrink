@@ -10,9 +10,16 @@ check it against.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-27
+
+### Added
+
+- Declared support for Python 3.14 (the classifier now advertises it; the
+  library already ran on 3.14).
+
 ## [0.1.0] - 2026-09-27
 
-The first release. Not yet published to PyPI.
+The first release.
 
 ### Added
 
@@ -30,5 +37,6 @@ The first release. Not yet published to PyPI.
 - `dfshrink.ext.pytest.assert_valid`: fail a test with the minimal repro
   instead of a traceback.
 
-[Unreleased]: https://github.com/Tomperez98/dfshrink/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Tomperez98/dfshrink/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Tomperez98/dfshrink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Tomperez98/dfshrink/releases/tag/v0.1.0
