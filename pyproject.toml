@@ -3,13 +3,41 @@ name = "dfshrink"
 version = "0.1.0"
 description = "Turn a failing Polars DataFrame into a minimal reproducible example"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Tomas Perez Alvarez", email = "tomasperezalvarez@gmail.com" }
 ]
 requires-python = ">=3.12"
+keywords = [
+    "polars",
+    "dataframe",
+    "data-contract",
+    "delta-debugging",
+    "ddmin",
+    "minimal-repro",
+    "testing",
+    "validation",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "polars>=1.44.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Tomperez98/pycheck"
+Repository = "https://github.com/Tomperez98/pycheck"
+Issues = "https://github.com/Tomperez98/pycheck/issues"
+Changelog = "https://github.com/Tomperez98/pycheck/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dataframely = ["dataframely>=3"]
@@ -37,6 +65,13 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing --cov-report=term"
+markers = [
+    "slow: long-running check; runs on main and on a schedule (MONITOR.md), not on every pull request",
+]
+
+[tool.uv]
+# Pin the toolchain in one place both a laptop and CI read (CI.md rule 4).
+required-version = ">=0.12.17,<0.13"
 
 
 [tool.ty.src]

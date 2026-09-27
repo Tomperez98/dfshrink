@@ -229,7 +229,16 @@ The README is the front door; each guide owns one task in depth:
 
 ## Development
 
+[mise](https://mise.jdx.dev/) drives every task, so a laptop and CI run the same
+commands:
+
 ```bash
-uv run pytest
-uv run ty check   # strict: every diagnostic is an error
+mise install       # pinned Python and uv
+mise run setup     # every dependency, including the validator extras
+mise run ci        # the merge gate: format, lint, type, hygiene, tests, examples, build, smoke
 ```
+
+While iterating, run one tier: `mise run test`, `mise run lint`, `mise run
+type`. Every diagnostic is an error. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+the pull-request checklist, and [RELEASING.md](RELEASING.md) for how a release
+is cut.

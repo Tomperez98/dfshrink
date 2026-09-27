@@ -1,0 +1,61 @@
+# The merge gate (CI.md). The workflow is glue: install the pinned toolchain,
+# then run the same `mise run` tiers a developer runs. Unknown tiers fail, and
+# every commit on main keeps its own result.
+name: ci
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  # Cancel superseded pull-request runs only; every main commit keeps its result.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  static:
+    name: format, lint, type, hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: mise run setup
+      - run: mise run format
+      - run: mise run lint
+      - run: mise run type
+      - run: mise run check
+
+  test:
+    name: unit tests and examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: mise run setup
+      - run: mise run test
+      - run: mise run examples
+
+  package:
+    name: release dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: mise run setup
+      # Exercise the release path on every merge: build everything, publish
+      # nothing (CI.md rule 8).
+      - run: mise run build
+      - run: mise run smoke

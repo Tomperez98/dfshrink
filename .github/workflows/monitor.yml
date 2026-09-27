@@ -1,0 +1,87 @@
+# Catch what the merge gate is too fast to run, and re-check what we do not
+# control (MONITOR.md). Failures open an issue so they reach a person.
+name: monitor
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  matrix:
+    name: full Python matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: mise run setup
+      - run: mise run test-matrix
+
+  verify-latest:
+    name: re-verify the published release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      # Downloading and installing from PyPI is what a user does; a package
+      # that disappeared or broke surfaces here before a user reports it.
+      - run: mise run verify-latest
+
+  metrics:
+    name: build metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: mise run setup
+      - name: Record build time and artifact size
+        run: |
+          start="$(date +%s)"
+          mise run build
+          end="$(date +%s)"
+          {
+            echo "### Build metrics (${GITHUB_SHA:0:12})"
+            echo "- build seconds: $((end - start))"
+            echo "- wheels and sdists:"
+            ls -l dist/*.whl dist/*.tar.gz
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  notify:
+    name: open an issue on failure
+    needs: [matrix, verify-latest, metrics]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const title = 'monitor: scheduled check failed';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `A scheduled monitor run failed.\n\nRun: ${runUrl}\n\nTriage: fix it, close it with a reason, or assign it to someone who can act.`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'monitor', per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo, title, body, labels: ['monitor'],
+              });
+            }

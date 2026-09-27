@@ -1,0 +1,108 @@
+# Every task a developer or CI runs lives here, so `mise run ci` is the same
+# command on a laptop and on a runner (CI.md rule 1). The toolchain is pinned
+# in [tools], the one place both read (CI.md rule 4).
+
+[tools]
+python = "3.12"
+uv = "0.12.17"
+
+[tasks.setup]
+description = "Install the pinned toolchain and every dependency"
+run = '''
+if [ -n "${CI:-}" ]; then
+  uv sync --all-extras --dev --locked
+else
+  uv sync --all-extras --dev
+fi
+'''
+
+[tasks.format]
+description = "Check formatting"
+run = "uv run ruff format --check ."
+
+[tasks.lint]
+description = "Lint, including banned APIs"
+run = "uv run ruff check ."
+
+[tasks.type]
+description = "Type-check at the strictest settings (diagnostics are errors)"
+run = "uv run ty check"
+
+[tasks.orphans]
+description = "Fail on source files outside the declared package"
+run = "uv run python scripts/check_orphans.py"
+
+[tasks.links]
+description = "Fail on broken repo-local Markdown links"
+run = "uv run python scripts/check_links.py"
+
+[tasks.check]
+description = "Repo hygiene: no orphans, no broken links"
+depends = ["orphans", "links"]
+
+[tasks.test]
+description = "Run the unit test suite"
+run = "uv run pytest"
+
+[tasks.test-matrix]
+description = "Run the suite across every supported Python version (MONITOR.md rule 1)"
+run = '''
+for py in 3.12 3.13; do
+  echo "--- python $py"
+  uv run --python "$py" --all-extras pytest
+done
+'''
+
+[tasks.examples]
+description = "Run every example the docs promise works"
+run = '''
+for example in examples/*.py; do
+  echo "--- $example"
+  uv run python "$example"
+done
+'''
+
+[tasks.build]
+description = "Dry-run the release build; needs no credentials"
+run = "uv run python scripts/release.py build --out-dir dist"
+
+[tasks.smoke]
+description = "Install the built wheel into a clean venv and smoke-test it"
+depends = ["build"]
+run = "uv run python scripts/release.py smoke --manifest dist/release.json"
+
+[tasks.ci]
+description = "The merge gate: every tier, in cost order (CI.md rules 2 and 8)"
+run = '''
+set -e
+# Sequential and cheap-first: the first failing tier stops the run.
+for tier in format lint type check test examples smoke; do
+  echo "=== $tier"
+  mise run "$tier"
+done
+'''
+
+[tasks."release:build"]
+description = "Build and verify the release artifacts (no credentials)"
+run = "uv run python scripts/release.py build --out-dir dist"
+
+[tasks."release:publish"]
+description = "Upload a built release; protected job only (PUBLISH.md)"
+run = "uv run python scripts/release.py publish --manifest dist/release.json"
+
+[tasks."release:verify"]
+description = "Install the published release from PyPI and smoke-test it"
+run = "uv run python scripts/release.py verify --manifest dist/release.json --expect-latest"
+
+[tasks.verify-latest]
+description = "Install the newest published release and smoke-test it (scheduled)"
+run = "uv run python scripts/release.py verify --latest --venv-dir .smoke"
+
+[tasks.bump]
+description = "Bump the version and changelog in one reviewed change"
+usage = 'arg "<version>" help="new X.Y.Z version, e.g. 0.2.0"'
+run = "uv run python scripts/release.py bump \"$usage_version\""
+
+[tasks.changelog]
+description = "List merged changes since the last tag, to edit into CHANGELOG.md"
+run = "uv run python scripts/release.py changelog"
