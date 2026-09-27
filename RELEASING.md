@@ -31,21 +31,22 @@ Run these in order. Each step names the exact command.
    post-merge monitor (`monitor.yml`) must be green for the candidate commit.
    If a check is red, fix it before releasing — never rush a change in.
 
-2. **Prepare the version in a pull request.** Choose the next SemVer number and
-   run:
+2. **Prepare the version in a pull request.** The changelog's top versioned
+   entry is the source of truth. Derive the next version from it and run:
 
    ```bash
-   mise run bump 0.2.0      # rewrites pyproject.toml and CHANGELOG.md
+   mise run bump            # patch + 1 from the changelog; edits CHANGELOG.md only.
+                            # pyproject.toml stays the 0.0.0 placeholder.
    mise run changelog       # lists merged commits since the last tag; edit
                             # the [Unreleased] section from that list
    mise run ci              # the same gate CI will run
    ```
 
-   Commit, push a branch, open a PR, and get it reviewed and merged. The version
-   lives in exactly one place (`pyproject.toml`); everything else reads it.
-
-   *First release only:* `pyproject.toml` already says `0.1.0`, so skip `bump`
-   and just replace `- Unreleased` on the `## [0.1.0]` line with the date.
+   For a minor or major bump, name the component instead: `uv run python
+   scripts/release.py bump --kind minor` (or `--kind major`). Commit, push a
+   branch, open a PR, and get it reviewed and merged. `pyproject.toml` always
+   pins the `0.0.0` placeholder; the release build stamps the real version into
+   a temporary copy, so a dev build can never look like a release.
 
 3. **Freeze the tested commit.** Release exactly the commit `main` points at,
    never the local checkout. Tag the *remote* SHA:

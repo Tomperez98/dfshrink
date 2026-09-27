@@ -1,5 +1,6 @@
-# Catch what the merge gate is too fast to run, and re-check what we do not
-# control (MONITOR.md). Failures open an issue so they reach a person.
+# Re-check what we do not control on a schedule (MONITOR.md rule 3) and record
+# build metrics (rule 2). The per-commit Python matrix lives in matrix.yml.
+# Failures open an issue so they reach a person (MONITOR.md rule 4).
 name: monitor
 
 on:
@@ -10,18 +11,6 @@ on:
 permissions: {}
 
 jobs:
-  matrix:
-    name: full Python matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - run: mise run setup
-      - run: mise run test-matrix
-
   verify-latest:
     name: re-verify the published release
     runs-on: ubuntu-latest
@@ -30,6 +19,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       # Downloading and installing from PyPI is what a user does; a package
       # that disappeared or broke surfaces here before a user reports it.
@@ -43,6 +33,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: mise run setup
       - name: Record build time and artifact size
@@ -59,7 +50,7 @@ jobs:
 
   notify:
     name: open an issue on failure
-    needs: [matrix, verify-latest, metrics]
+    needs: [verify-latest, metrics]
     if: failure()
     runs-on: ubuntu-latest
     permissions:

@@ -29,6 +29,8 @@ CHANGELOG = REPO / "CHANGELOG.md"
 DEFAULT_REPO_SLUG = "Tomperez98/dfshrink"
 VERSION_RE = re.compile(r'(?m)^version = "[^"]+"$')
 SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+VERSION_HEADING_RE = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
+PLACEHOLDER = "0.0.0"
 USER_AGENT = "dfshrink-release"
 SMOKE = (
     "import dfshrink, polars as pl\n"
@@ -84,6 +86,42 @@ def version_key(value: str) -> tuple[int, ...]:
     if match is None:
         fail(f"version {value!r} is not X.Y.Z; this project ships SemVer only")
     return tuple(int(part) for part in match.groups())
+
+
+def current_version() -> str:
+    """Return the topmost versioned changelog entry — the source of truth."""
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    match = VERSION_HEADING_RE.search(changelog)
+    if match is None:
+        fail("CHANGELOG.md has no `## [X.Y.Z]` heading; add one before building")
+    return match.group(1)
+
+
+def bump_version(current: str, kind: str) -> str:
+    """Derive the next SemVer from ``current`` for the given ``kind``."""
+    major, minor, patch = version_key(current)
+    if kind == "major":
+        return f"{major + 1}.0.0"
+    if kind == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def stamp_version(version: str) -> str:
+    """Stamp ``version`` into ``pyproject.toml``; return the text to restore."""
+    original = PYPROJECT.read_text(encoding="utf-8")
+    match = VERSION_RE.search(original)
+    if match is None:
+        fail("pyproject.toml has no `version = ...` line to stamp")
+    if match.group(0) != f'version = "{PLACEHOLDER}"':
+        fail(
+            f"pyproject.toml must pin the placeholder {PLACEHOLDER!r}; found "
+            f"{match.group(0)!r}. The changelog is the source of truth."
+        )
+    PYPROJECT.write_text(
+        VERSION_RE.sub(f'version = "{version}"', original, count=1), encoding="utf-8"
+    )
+    return original
 
 
 def expected_artifacts(name: str, version: str) -> list[str]:
@@ -156,7 +194,7 @@ def command_build(args: argparse.Namespace) -> None:
     """Build every artifact once, verify it, and write the release manifest."""
     metadata = project_metadata()
     name = str(metadata["name"])
-    version = str(metadata["version"])
+    version = current_version()
     out_dir = Path(args.out_dir).resolve()
     commit = args.commit or capture(["git", "rev-parse", "HEAD"])
 
@@ -166,7 +204,11 @@ def command_build(args: argparse.Namespace) -> None:
                 stale.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    run(["uv", "build", "--out-dir", str(out_dir)])
+    original = stamp_version(version)
+    try:
+        run(["uv", "build", "--out-dir", str(out_dir)])
+    finally:
+        PYPROJECT.write_text(original, encoding="utf-8")
 
     expected = expected_artifacts(name, version)
     built = artifact_names(out_dir)
@@ -254,29 +296,35 @@ def command_publish(args: argparse.Namespace) -> None:
     name = str(manifest["name"])
     version = str(manifest["version"])
     files: dict[str, str] = manifest["files"]
+    expected = expected_artifacts(name, version)
+    if set(files) != set(expected):
+        fail(f"manifest lists {sorted(files)}, expected {sorted(expected)}")
     dist = Path(args.manifest).resolve().parent
 
     status, body = pypi_release(name, version)
     if status == 200:
         published = published_digests(body)
-        if all(published.get(name_) == digest for name_, digest in files.items()):
-            say(f"publish: {name} {version} already published with identical bytes; nothing to do")
-            return
         clash = [
-            name_
-            for name_, digest in files.items()
-            if name_ in published and published[name_] != digest
+            artifact
+            for artifact, digest in files.items()
+            if artifact in published and published[artifact] != digest
         ]
         if clash:
             fail(f"version {version} already holds different bytes for {clash}; bump the version")
-        fail(f"version {version} exists on PyPI but is incomplete; investigate before retrying")
-    if status != 404:
+        missing = [artifact for artifact in files if artifact not in published]
+        if not missing:
+            say(f"publish: {name} {version} already published with identical bytes; nothing to do")
+            return
+        say(f"publish: {name} {version} stopped partway; uploading the missing artifacts {missing}")
+    elif status != 404:
         fail(f"PyPI lookup for {name} {version} returned HTTP {status}")
+    else:
+        missing = list(files)
+        assert_version_is_newer(name, version)
 
-    assert_version_is_newer(name, version)
     assert_commit_is_on_main(str(manifest["commit"]))
 
-    paths = [str(dist / artifact) for artifact in files]
+    paths = [str(dist / artifact) for artifact in missing]
     for path in paths:
         if not Path(path).is_file():
             fail(f"expected artifact {path} is missing")
@@ -329,6 +377,9 @@ def command_verify(args: argparse.Namespace) -> None:
         name = str(manifest["name"])
         version = str(manifest["version"])
         files: dict[str, str] = manifest["files"]
+        expected = expected_artifacts(name, version)
+        if set(files) != set(expected):
+            fail(f"manifest lists {sorted(files)}, expected {sorted(expected)}")
         status, body = pypi_release(name, version)
         if status != 200:
             fail(f"{name} {version} is not downloadable from PyPI (HTTP {status})")
@@ -357,19 +408,26 @@ def command_verify(args: argparse.Namespace) -> None:
 # --- bump and changelog -----------------------------------------------------
 
 
+def rewrite_changelog_links(changelog: str, old: str, new: str) -> str:
+    """Point the Unreleased link at the new version and add the new version's link."""
+    match = re.search(
+        r"\[Unreleased\]:\s*(https://github\.com/[^/\s]+/[^/\s]+)/compare/v[\d.]+\.\.\.HEAD",
+        changelog,
+    )
+    if match is None:
+        fail("CHANGELOG.md has no [Unreleased] compare link to rewrite")
+    base = match.group(1)
+    unreleased = f"[Unreleased]: {base}/compare/v{new}...HEAD"
+    new_link = f"[{new}]: {base}/compare/v{old}...v{new}"
+    return changelog.replace(match.group(0), f"{unreleased}\n{new_link}", 1)
+
+
 def command_bump(args: argparse.Namespace) -> None:
-    """Move the version and changelog to a new release in one recorded change."""
-    metadata = project_metadata()
-    current = str(metadata["version"])
-    new = args.version
+    """Derive the next version from the changelog and edit the changelog."""
+    current = current_version()
+    new = args.version if args.version is not None else bump_version(current, args.kind)
     if version_key(new) <= version_key(current):
         fail(f"new version {new} must be greater than current {current}")
-
-    text = PYPROJECT.read_text(encoding="utf-8")
-    updated, count = VERSION_RE.subn(f'version = "{new}"', text, count=1)
-    if count != 1:
-        fail("could not find a unique version line in pyproject.toml")
-    PYPROJECT.write_text(updated, encoding="utf-8")
 
     changelog = CHANGELOG.read_text(encoding="utf-8")
     marker = "## [Unreleased]"
@@ -377,9 +435,10 @@ def command_bump(args: argparse.Namespace) -> None:
         fail(f"CHANGELOG.md has no {marker} heading")
     today = datetime.now(tz=UTC).date().isoformat()
     changelog = changelog.replace(marker, f"{marker}\n\n## [{new}] - {today}", 1)
+    changelog = rewrite_changelog_links(changelog, current, new)
     CHANGELOG.write_text(changelog, encoding="utf-8")
 
-    say(f"bump: {current} -> {new}")
+    say(f"bump: {current} -> {new} (pyproject.toml stays the {PLACEHOLDER} placeholder)")
     say("next: review the diff, then commit it and tag the merged commit:")
     say(f'  git commit -am "release: {new}"')
     say("  git push origin HEAD:main")
@@ -441,8 +500,19 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--venv-dir", default=".smoke")
     smoke.set_defaults(func=command_smoke)
 
-    bump = subparsers.add_parser("bump", help="bump the version and changelog")
-    bump.add_argument("version")
+    bump = subparsers.add_parser("bump", help="derive the next version from the changelog")
+    bump.add_argument(
+        "--kind",
+        choices=["patch", "minor", "major"],
+        default="patch",
+        help="which component to bump when no explicit version is given (default: patch)",
+    )
+    bump.add_argument(
+        "version",
+        nargs="?",
+        default=None,
+        help="explicit X.Y.Z version; default: patch + 1 from the changelog",
+    )
     bump.set_defaults(func=command_bump)
 
     changelog = subparsers.add_parser("changelog", help="list changes since the last tag")

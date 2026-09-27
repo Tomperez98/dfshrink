@@ -1,6 +1,8 @@
 [project]
 name = "dfshrink"
-version = "0.1.0"
+# The changelog's top versioned entry is the source of truth; the release build
+# stamps the real version into a temporary copy of this file (RELEASING.md).
+version = "0.0.0"
 description = "Turn a failing Polars DataFrame into a minimal reproducible example"
 readme = "README.md"
 license = "MIT"
@@ -26,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
 ]
