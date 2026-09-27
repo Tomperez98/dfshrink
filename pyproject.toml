@@ -34,10 +34,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Tomperez98/pycheck"
-Repository = "https://github.com/Tomperez98/pycheck"
-Issues = "https://github.com/Tomperez98/pycheck/issues"
-Changelog = "https://github.com/Tomperez98/pycheck/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Tomperez98/dfshrink"
+Repository = "https://github.com/Tomperez98/dfshrink"
+Issues = "https://github.com/Tomperez98/dfshrink/issues"
+Changelog = "https://github.com/Tomperez98/dfshrink/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dataframely = ["dataframely>=3"]

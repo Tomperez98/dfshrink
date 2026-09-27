@@ -26,7 +26,7 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
 CHANGELOG = REPO / "CHANGELOG.md"
-DEFAULT_REPO_SLUG = "Tomperez98/pycheck"
+DEFAULT_REPO_SLUG = "Tomperez98/dfshrink"
 VERSION_RE = re.compile(r'(?m)^version = "[^"]+"$')
 SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 USER_AGENT = "dfshrink-release"
