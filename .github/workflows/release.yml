@@ -1,0 +1,86 @@
+# Build once without credentials, publish the same bytes from a protected job,
+# then verify from the outside (PUBLISH.md). Triggered by a version tag; see
+# RELEASING.md for the checklist.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  # Only one release at a time, and a running release is never cancelled.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (no credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      # No dependency install: `uv build` is isolated, and this job holds no
+      # credentials. It only produces the artifacts.
+      - run: python scripts/release.py build --out-dir dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: publish (protected)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/p/dfshrink
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      # Check out the tagged commit explicitly, whatever ref started the run.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist
+      # No caches, and no dependency install: the only credentialed step uploads
+      # bytes this job did not build. Every precondition is re-checked here,
+      # after the approval, right before the first upload.
+      - run: python scripts/release.py publish --manifest dist/release.json
+
+  verify:
+    name: verify from PyPI
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # Validation code comes from main; only the artifacts come from the
+      # release (PUBLISH.md rule 6).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist
+      - run: python scripts/release.py verify --manifest dist/release.json --expect-latest
