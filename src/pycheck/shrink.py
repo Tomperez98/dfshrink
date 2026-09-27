@@ -47,8 +47,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import override
 
 import polars as pl
+
+from pycheck._render import render_code, render_markdown
 
 DEFAULT_MAX_EVALS = 10_000
 """Default cap on predicate calls; bounds every ``shrink_rows`` invocation."""
@@ -82,6 +85,43 @@ class Repro:
     def removed_rows(self) -> int:
         """Rows dropped from the input frame."""
         return self.original_rows - self.frame.height
+
+    def as_frame(self) -> pl.DataFrame:
+        """The reduced frame -- the replayable repro to re-run the predicate on."""
+        return self.frame
+
+    def to_code(self) -> str:
+        """A pasteable ``pl.DataFrame(...)`` constructor for the repro.
+
+        ``eval`` of the result, with ``polars as pl`` in scope, rebuilds an
+        equal frame.  A dtype that cannot be rendered without loss raises
+        ``TypeError`` instead of emitting code that builds a different frame.
+        """
+        return render_code(self.frame)
+
+    def to_markdown(self) -> str:
+        """The repro as a GitHub-flavoured markdown table (dtypes in headers)."""
+        return render_markdown(self.frame)
+
+    @override
+    def __str__(self) -> str:
+        """A one-line summary: size, rows removed, calls, and minimality."""
+        rows = "row" if self.frame.height == 1 else "rows"
+        proven = "proven" if self.minimality_proven else "not proven"
+        return (
+            f"Repro({self.frame.height} {rows}, removed {self.removed_rows} of "
+            f"{self.original_rows}, {self.predicate_calls} predicate calls, "
+            f"minimality {proven})"
+        )
+
+    @override
+    def __repr__(self) -> str:
+        """A constructor-shaped repr that never dumps the frame."""
+        return (
+            f"Repro(rows={self.frame.height}, removed_rows={self.removed_rows}, "
+            f"predicate_calls={self.predicate_calls}, "
+            f"minimality_proven={self.minimality_proven})"
+        )
 
 
 def shrink_rows(

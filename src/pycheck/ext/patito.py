@@ -5,6 +5,9 @@ validated frame when the data is valid and raises
 :class:`patito.exceptions.DataFrameValidationError` when it is not.
 ``shrink_rows`` needs the *failure* predicate (``True`` while the frame is
 invalid), so this module wraps ``validate`` and maps that error to ``True``.
+``diagnose`` additionally reads the per-column error detail to report *why*
+the frame fails.  patito does not expose which *rows* failed, so ``diagnose``
+falls back to shrinking the full frame.
 
 Requires the ``patito`` extra::
 
@@ -26,8 +29,12 @@ except ImportError as exc:  # pragma: no cover - depends on install
 
 from pycheck.ext._adapter import (
     DEFAULT_MAX_EVALS,
+    Diagnosis,
+    Explainer,
     FailPredicate,
+    Failure,
     Repro,
+    make_diagnose,
     make_shrink_rows,
 )
 
@@ -61,7 +68,46 @@ def as_predicate(model: type[_ModelLike]) -> FailPredicate:
     return fails
 
 
+def as_failure(model: type[_ModelLike]) -> Explainer:
+    """Return a ``DataFrame -> Failure | None`` explainer for ``model``.
+
+    Reads the first per-column error from the raised
+    :class:`~patito.exceptions.DataFrameValidationError`: the error type stands
+    in for the rule name, and the ``loc`` path names the column.  patito does
+    not report which rows failed, so ``invalid_rows`` is always ``None``.
+    """
+
+    def explain(df: pl.DataFrame) -> Failure | None:
+        try:
+            model.validate(df)
+        except patito.exceptions.DataFrameValidationError as exc:
+            errors = exc.errors()
+            column: str | None = None
+            rule: str | None = None
+            if errors:
+                loc = errors[0].get("loc")
+                if loc:
+                    first = loc[0]
+                    column = first if isinstance(first, str) else None
+                rule = errors[0].get("type")
+            return Failure(rule=rule, column=column, message=str(exc), invalid_rows=None)
+        return None
+
+    return explain
+
+
 shrink_rows = make_shrink_rows(as_predicate)
+diagnose = make_diagnose(as_failure, as_predicate)
 
 
-__all__ = ["DEFAULT_MAX_EVALS", "FailPredicate", "Repro", "as_predicate", "shrink_rows"]
+__all__ = [
+    "DEFAULT_MAX_EVALS",
+    "Diagnosis",
+    "FailPredicate",
+    "Failure",
+    "Repro",
+    "as_failure",
+    "as_predicate",
+    "diagnose",
+    "shrink_rows",
+]

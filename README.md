@@ -48,7 +48,7 @@ Not on PyPI yet — install from a checkout:
 uv sync            # or: pip install -e .
 ```
 
-Requires Python 3.14+ and Polars.
+Requires Python 3.12+ and Polars.
 
 ## What it does
 
@@ -80,8 +80,26 @@ else:
 
 `fails` is the seam — a lambda, a test assertion, or the adapter from
 `pycheck.ext.dataframely` / `pycheck.ext.pandera` / `pycheck.ext.patito` (next
-section). Keep it pure:
-shrinking re-runs it many times, so it must be deterministic.
+section). Keep it pure: shrinking re-runs it many times, so it must be
+deterministic.
+
+### Turn it into something you can paste
+
+A `Repro` renders itself for the place the repro is going:
+
+```python
+repro.to_code()  # a pl.DataFrame({...}, schema={...}) constructor
+repro.to_markdown()  # a markdown table, dtypes in the headers
+str(repro)  # 'Repro(1 row, removed 5 of 6, 4 predicate calls, minimality proven)'
+repro.as_frame()  # the replayed frame, to re-run your predicate on
+```
+
+`to_code()` round-trips: `eval(repro.to_code())`, with only `polars as pl` in
+scope, rebuilds an equal frame — so the constructor can go straight into a test.
+Datetime and Duration columns are written as integer counts in the column's own
+unit, so nanosecond timestamps survive. A dtype that cannot be rendered without
+loss (a column of `pl.Object`, say) raises `TypeError` rather than emitting code
+that quietly builds a different frame.
 
 ## Shrink a dataframely, pandera, or patito schema
 
@@ -152,6 +170,67 @@ versions live in
 seam is [`examples/predicate.py`](examples/predicate.py). The frame must already
 match the schema's columns and dtypes — shrinking only removes rows, so a
 structural mismatch is the caller's bug.
+
+## Explain why it fails
+
+`shrink_rows` answers *which rows*. `diagnose` also answers *why* — the rule
+and column the validator flagged, not just the frame:
+
+```python
+from pycheck.ext.dataframely import diagnose
+
+found = diagnose(df, HouseSchema)
+print(found.repro.frame)  # the minimal failing rows
+print(found.failure.rule)  # 'amount|min'
+print(found.failure.column)  # 'amount'
+print(found.failure.invalid_rows)  # the rows the validator already flagged
+```
+
+`diagnose` returns `None` when the frame passes, else a
+`pycheck.Diagnosis` whose `repro` is the same minimal repro `shrink_rows` would
+produce, and whose `failure` is `None` only when the validator exposes no
+failure metadata. When the validator reports the invalid rows (dataframely,
+pandera), shrinking starts there instead of over the whole frame; when it
+doesn't (patito), `diagnose` falls back to black-box shrinking and still reports
+the failing column. A structural mismatch (missing column, wrong dtype) is
+reported as a `Failure` with no `invalid_rows` — the frame fails, but not by row
+content.
+
+A `Diagnosis` folds the reason and the repro into one ticket-ready report:
+
+```python
+print(found.to_markdown())
+```
+
+```text
+Validation failed: column 'amount' fails rule 'amount|min'.
+
+Minimal repro:
+
+| amount (Int64) |
+| --- |
+| -9 |
+```
+
+## Fail a test with the repro, not the traceback
+
+`pycheck.ext.pytest.assert_valid` is the pytest-shaped replacement for
+`assert schema.is_valid(df)`. Pass the adapter's `diagnose` as the seam and it
+either returns silently or fails the test with the rule/column and the minimal
+repro:
+
+```python
+from pycheck.ext.dataframely import diagnose
+from pycheck.ext.pytest import assert_valid
+
+
+def test_house_schema(df):
+    assert_valid(df, HouseSchema, diagnose=diagnose)
+```
+
+It imports no validator library and touches no global state, so it works the
+same inside a fixture. On failure the assertion message is
+`found.to_markdown()`.
 
 ## Fast: ~log₂(n) predicate calls
 
