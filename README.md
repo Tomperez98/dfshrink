@@ -2,9 +2,9 @@
 
 **Shrink a failing DataFrame to the fewest rows that still break.**
 
-A validator tells you *that* a 2-million-row frame broke a rule — not *which*
-rows. `shrink_rows` runs that same validator over smaller and smaller subsets
-and returns the minimal frame that still fails:
+Your validator says the frame is bad. It doesn't say *which* rows. `shrink_rows`
+runs that same predicate over smaller and smaller subsets and returns the
+minimal frame that still fails:
 
 ```python
 import polars as pl
@@ -12,33 +12,43 @@ from pycheck import shrink_rows
 
 df = pl.DataFrame(
     {
-        "id": [0, 1, 2, 3, 4, 5],
-        "amount": [10, 20, 510, 30, 40, 50],
-        "currency": ["EUR", "EUR", None, "EUR", "EUR", "EUR"],
+        "order_id": [1, 1, 1, 2, 2, 3],
+        "amount": [10, 20, 30, 5, 7, 9],
+        "total": [50, 50, 50, 12, 12, 9],
     }
 )
 
 
 def bug(df: pl.DataFrame) -> bool:
-    return bool(((df["amount"] > 500) & (df["currency"].is_null())).any())
+    """Each order's line items must sum to its declared total."""
+    bad = (
+        df.group_by("order_id")
+        .agg(pl.col("amount").sum().alias("lines"), pl.col("total").first())
+        .filter(pl.col("lines") != pl.col("total"))
+    )
+    return bad.height > 0
 
 
 repro = shrink_rows(df, bug)
+print(repro)
 print(repro.frame)
 ```
 
 ```
+Repro(1 row, removed 5 of 6, 4 predicate calls, minimality proven)
 shape: (1, 3)
-┌─────┬────────┬──────────┐
-│ id  ┆ amount ┆ currency │
-│ --- ┆ ---    ┆ ---      │
-│ i64 ┆ i64    ┆ str      │
-╞═════╪════════╪══════════╡
-│ 2   ┆ 510    ┆ null     │
-└─────┴────────┴──────────┘
+┌──────────┬────────┬───────┐
+│ order_id ┆ amount ┆ total │
+│ ---      ┆ ---    ┆ ---   │
+│ i64      ┆ i64    ┆ i64   │
+╞══════════╪════════╪═══════╡
+│ 1        ┆ 10     ┆ 50    │
+└──────────┴────────┴───────┘
 ```
 
-Six rows in, one row out — small enough to paste into a ticket or a test.
+Six rows in, one row out — in four calls to `bug`. The rule is an aggregate, so
+there is no per-row mask to `.filter()` on; "does this subset still fail?" is the
+only question, and shrinking answers it.
 
 ## Install
 
@@ -48,22 +58,21 @@ Not on PyPI yet — install from a checkout:
 uv sync            # or: pip install -e .
 ```
 
-Requires Python 3.12+ and Polars.
+Requires Python 3.12+ and Polars. The base package imports only Polars; each
+validator adapter is an extra (`uv sync --extra dataframely`, `--extra pandera`,
+`--extra patito`).
 
-## What it does
+## What it is
 
-`shrink_rows(frame, fails)` runs delta debugging (`ddmin`) over a Polars frame's
-rows and returns the smallest subset on which `fails` is still `True`. It's a
-minimal bug repro for data — the Python/Polars equivalent of R's
-`minex::reduce_rows`.
+`shrink_rows(frame, fails, *, max_evals=10_000) -> Repro | None` runs delta
+debugging (`ddmin`) over a Polars frame's rows and returns the smallest subset on
+which `fails` is still `True` — a minimal bug repro for data, the Python/Polars
+analog of R's `minex::reduce_rows`.
 
-**Why not just `.filter()`?** Filtering needs a per-row mask: you have to write
-the failing rule as an expression. Shrinking only needs the black-box predicate
-you already have — the `df -> bool` that told you the frame failed. When the
-failure is an aggregate, a cross-row interaction, or a validator that returns
-only "failed", there is no mask to filter on; there is only "does this subset
-still fail?". That's the question shrinking answers. If you *can* write the
-mask, `filter` is simpler — use it. This is for when you can't.
+**If you can write the failing rule as a per-row mask, use `.filter()` — it's
+simpler.** Shrinking is for when you can't: a validator that returns a single bit
+(`is_valid`, `validate`, patito), an aggregate, or a cross-row interaction. There
+is no mask then; there is only "does this subset still fail?".
 
 ## Reading the result
 
@@ -78,14 +87,13 @@ else:
     print(repro.minimality_proven)  # True => removing any one row makes it pass
 ```
 
-`fails` is the seam — a lambda, a test assertion, or the adapter from
-`pycheck.ext.dataframely` / `pycheck.ext.pandera` / `pycheck.ext.patito` (next
+`fails` is the seam — a lambda, a test assertion, or a schema adapter (next
 section). Keep it pure: shrinking re-runs it many times, so it must be
 deterministic.
 
-### Turn it into something you can paste
+### Paste it into a test or a ticket
 
-A `Repro` renders itself for the place the repro is going:
+A `Repro` renders itself for wherever the repro is going:
 
 ```python
 repro.to_code()  # a pl.DataFrame({...}, schema={...}) constructor
@@ -95,13 +103,12 @@ repro.as_frame()  # the replayed frame, to re-run your predicate on
 ```
 
 `to_code()` round-trips: `eval(repro.to_code())`, with only `polars as pl` in
-scope, rebuilds an equal frame — so the constructor can go straight into a test.
-Datetime and Duration columns are written as integer counts in the column's own
-unit, so nanosecond timestamps survive. A dtype that cannot be rendered without
-loss (a column of `pl.Object`, say) raises `TypeError` rather than emitting code
-that quietly builds a different frame.
+scope, rebuilds an equal frame — so the constructor goes straight into a test.
+A dtype that cannot be rendered without loss (a column of `pl.Object`, say)
+raises `TypeError` rather than emitting code that quietly builds a different
+frame.
 
-## Shrink a dataframely, pandera, or patito schema
+## Shrink against dataframely, pandera, or patito
 
 A schema tells you *that* a rule broke — not which rows did it:
 
@@ -111,17 +118,8 @@ dataframely.exc.ValidationError: 1 rules failed validation:
    - 'min' failed for 1 rows
 ```
 
-Hand the schema to `shrink_rows` instead, and it returns the row that did it:
-
-```text
-dataframely: [-9]
-```
-
-Same rule, same frame — one row out. You already wrote the validator, so there's
-nothing to re-express: pass the schema itself. `shrink_rows` minimizes over a
-plain `DataFrame -> bool` predicate; to shrink against a validation library,
-import the adapter that owns that library — the base `pycheck` package never
-imports it, so the dependency stays optional.
+Hand the schema to `shrink_rows` instead, and it returns the row that did it.
+You already wrote the validator, so there's nothing to re-express:
 
 ```python
 import dataframely as dy
@@ -135,16 +133,15 @@ class HouseSchema(dy.Schema):
 repro = shrink_rows(df, HouseSchema)  # inverts HouseSchema.is_valid(df)
 ```
 
+Same shape for the others — `pycheck.ext.pandera` wraps `validate(df)`-raises,
+`pycheck.ext.patito` wraps `Model.validate(df)`:
+
 ```python
 import pandera.polars as pa
 from pycheck.ext.pandera import shrink_rows
 
-
-class Accounts(pa.DataFrameModel):
-    amount: pa.typing.Series[int] = pa.Field(gt=0)
-
-
-repro = shrink_rows(df, Accounts)  # wraps Accounts.validate(df)
+schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
+repro = shrink_rows(df, schema)
 ```
 
 ```python
@@ -156,49 +153,26 @@ class House(pt.Model):
     amount: int = pt.Field(ge=0)
 
 
-repro = shrink_rows(df, House)  # wraps House.validate(df)
+repro = shrink_rows(df, House)
 ```
 
-`pycheck.ext.dataframely` adapts `is_valid(df) -> bool`; `pycheck.ext.pandera`
-and `pycheck.ext.patito` adapt `validate(df)`-raises; each also exposes
-`as_predicate` for the raw predicate. Install the library you need with
-`uv sync --extra dataframely`, `--extra pandera`, or `--extra patito`. Runnable
-versions live in
+Each module also exposes `as_predicate` for the raw `DataFrame -> bool`. The
+frame must already match the schema's columns and dtypes — shrinking only removes
+rows, so a structural mismatch is the caller's bug. Runnable versions:
 [`examples/dataframely_schema.py`](examples/dataframely_schema.py),
-[`examples/pandera_schema.py`](examples/pandera_schema.py), and
-[`examples/patito_schema.py`](examples/patito_schema.py); the dependency-free
-seam is [`examples/predicate.py`](examples/predicate.py). The frame must already
-match the schema's columns and dtypes — shrinking only removes rows, so a
-structural mismatch is the caller's bug.
+[`examples/pandera_schema.py`](examples/pandera_schema.py),
+[`examples/patito_schema.py`](examples/patito_schema.py), and the
+dependency-free [`examples/predicate.py`](examples/predicate.py).
 
-## Explain why it fails
+## Get the reason, not just the rows: `diagnose`
 
-`shrink_rows` answers *which rows*. `diagnose` also answers *why* — the rule
-and column the validator flagged, not just the frame:
+`shrink_rows` answers *which rows*. `diagnose` also answers *why* — the rule and
+column the validator flagged — as a ticket-ready report:
 
 ```python
 from pycheck.ext.dataframely import diagnose
 
 found = diagnose(df, HouseSchema)
-print(found.repro.frame)  # the minimal failing rows
-print(found.failure.rule)  # 'amount|min'
-print(found.failure.column)  # 'amount'
-print(found.failure.invalid_rows)  # the rows the validator already flagged
-```
-
-`diagnose` returns `None` when the frame passes, else a
-`pycheck.Diagnosis` whose `repro` is the same minimal repro `shrink_rows` would
-produce, and whose `failure` is `None` only when the validator exposes no
-failure metadata. When the validator reports the invalid rows (dataframely,
-pandera), shrinking starts there instead of over the whole frame; when it
-doesn't (patito), `diagnose` falls back to black-box shrinking and still reports
-the failing column. A structural mismatch (missing column, wrong dtype) is
-reported as a `Failure` with no `invalid_rows` — the frame fails, but not by row
-content.
-
-A `Diagnosis` folds the reason and the repro into one ticket-ready report:
-
-```python
 print(found.to_markdown())
 ```
 
@@ -212,7 +186,15 @@ Minimal repro:
 | -9 |
 ```
 
-## Minimize the value, not just the row
+`diagnose` returns `None` when the frame passes, else a `pycheck.Diagnosis`
+whose `repro` is the same minimal repro `shrink_rows` would produce, and whose
+`failure` carries the rule, column, and (when the validator exposes them) the
+invalid rows. When the validator reports the invalid rows (dataframely, pandera),
+shrinking starts there instead of over the whole frame; when it doesn't (patito),
+`diagnose` falls back to black-box shrinking and still reports the failing
+column.
+
+## Move the value to the boundary, not just the row
 
 Shrinking drops rows; it can't say *how far* past the line a cell is. Under a
 `min=0` rule the failing row might be `amount=-9`, but the interesting repro is
@@ -231,28 +213,18 @@ reduced.column  # 'amount'
 reduced.direction  # 'increase'
 ```
 
-`minimize_values` reads the column from the diagnosis and the search direction
-from the rule name (`min`/`greater` → increase, `max`/`less` → decrease). Pass a
-bare `Repro` instead with `column=` and `direction=`:
-
-```python
-minimize_values(repro, fails, column="amount", direction="increase")
-```
-
-It assumes the predicate is monotone *along that column*: moving the value
-toward the valid region flips the failure once and stays passing. When no
-passing value is found, or the budget runs out, the cell is left untouched and
-`proven` is `False` — the step never guesses a boundary it can't show. Integer
-columns land on the adjacent integer, `Float64` on the adjacent float (so a
-`min=0` float cell lands just below zero). Only integer and `Float64` columns
-are supported; a null, `nan`, or `inf` cell is rejected.
+`minimize_values` reads the column from the diagnosis and the direction from the
+rule name (`min`/`greater` → increase, `max`/`less` → decrease). Pass a bare
+`Repro` with `column=` and `direction=` instead. It assumes the predicate is
+monotone *along that column*; when no passing value is found, or the budget runs
+out, the cell is left untouched and `proven` is `False` — the step never guesses
+a boundary it can't show. Only integer and `Float64` columns are supported.
 
 ## Fail a test with the repro, not the traceback
 
 `pycheck.ext.pytest.assert_valid` is the pytest-shaped replacement for
-`assert schema.is_valid(df)`. Pass the adapter's `diagnose` as the seam and it
-either returns silently or fails the test with the rule/column and the minimal
-repro:
+`assert schema.is_valid(df)`. Pass the adapter's `diagnose` and it either returns
+silently or fails the test with the rule/column and the minimal repro:
 
 ```python
 from pycheck.ext.dataframely import diagnose
@@ -263,14 +235,13 @@ def test_house_schema(df):
     assert_valid(df, HouseSchema, diagnose=diagnose)
 ```
 
-It imports no validator library and touches no global state, so it works the
-same inside a fixture. On failure the assertion message is
-`found.to_markdown()`.
+It imports no validator library and touches no global state, so it works the same
+inside a fixture.
 
 ## Fast: ~log₂(n) predicate calls
 
 The only cost that scales with your data is your predicate. `ddmin` narrows by
-chunks instead of removing one row at a time — which is `O(n²)` calls — so a bad
+chunks instead of removing one row at a time (which is `O(n²)` calls), so a bad
 row is isolated in ~log₂(n) calls:
 
 | Frame | Bad rows | Result | Predicate calls |
@@ -278,29 +249,35 @@ row is isolated in ~log₂(n) calls:
 | 20,000 rows | 1 | 1 row | 16–29 |
 | 6 rows | 1 | 1 row | 4 |
 
-The call count depends on where the bad rows sit; the range is measured. With a
-cheap predicate the shrinking itself adds ~1 ms of overhead — if your predicate
-is expensive, cap it with `max_evals`.
+Call counts depend on where the bad rows sit; the range is measured. With a cheap
+predicate the shrinking itself adds ~1 ms of overhead — if your predicate is
+expensive, cap it with `max_evals` (default 10,000).
 
 That ~log₂(n) figure is the common case: a few bad rows among many. The opposite
-case is when the failure needs *most* of the frame — a sum over nearly every
-row, say. Then every proper subset passes, `ddmin` has nothing to remove, and
-the budget (`max_evals`, default 10,000) is what stops the search. The result is
-still a valid repro — the frame itself, with `minimality_proven=False` — because
-no smaller subset reproduces the failure. Shrinking cannot reduce what no
-smaller subset reproduces.
+case is when the failure needs *most* of the frame — a sum over nearly every row.
+Then every proper subset passes, `ddmin` has nothing to remove, and the budget is
+what stops the search. The result is still a valid repro (the frame itself, with
+`minimality_proven=False`) — no smaller subset reproduces the failure.
 
-## When not to use it
+## Who it's for — and when not to use it
 
+**It's for Python data pipelines on Polars with a pass/fail validator**: a
+transformation, a data contract, or a schema check you run in a test, a CI job,
+or locally before shipping. The payoff is turning a failed check into the one row
+to look at, paste into a test, or hand to the data owner.
+
+It is deliberately narrow:
+
+- **Polars only.** pandas and SQL/warehouse data aren't supported today. If the
+  bad data lives in a warehouse, you must materialize the frame first.
 - **Not a validator.** It doesn't define or check rules; it runs *after* one
   fails, using your predicate as the oracle.
-- **Columns, not yet.** It minimizes rows and numeric values, but it doesn't
-  drop whole columns.
-- **Value minimization needs monotonicity.** Moving a cell toward the valid
-  region must flip the failure once. A non-monotone predicate is left unproven,
-  not guessed.
+- **Not production monitoring.** It's a developer/CI debugging tool, not a
+  data-observability service.
 - **No pipeline attribution.** It won't tell you *which step* (a join, a cast)
-  introduced the bad rows.
+  introduced the bad rows — only which rows.
+- **Columns, not yet.** It minimizes rows and numeric values, but doesn't drop
+  columns.
 - **Needs a pure, deterministic predicate.** Nondeterminism makes shrinking
   meaningless.
 
@@ -309,8 +286,8 @@ smaller subset reproduces.
 `shrink_rows(frame, fails, *, max_evals=10_000) -> Repro | None`
 
 - **Bugs panic.** An empty frame or `max_evals < 1` raises `ValueError`; a
-  `fails` that raises propagates unchanged (never swallowed as "does not
-  fail"); a `fails` that returns `None` raises `TypeError`.
+  `fails` that raises propagates unchanged (never swallowed as "does not fail");
+  a `fails` that returns `None` raises `TypeError`.
 - **Expected failures are values.** A non-failing input returns `None`; an
   exhausted budget returns a `Repro` with `minimality_proven=False` — still a
   valid repro, just not proven minimal.
@@ -318,7 +295,8 @@ smaller subset reproduces.
   order, and when `minimality_proven` is `True`, removing any single row makes
   `fails` return `False`.
 
-Full contract, algorithm, and references: [`src/pycheck/shrink.py`](src/pycheck/shrink.py).
+Full contract, algorithm, and references:
+[`src/pycheck/shrink.py`](src/pycheck/shrink.py).
 
 ## Development
 
