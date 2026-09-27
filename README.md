@@ -212,6 +212,41 @@ Minimal repro:
 | -9 |
 ```
 
+## Minimize the value, not just the row
+
+Shrinking drops rows; it can't say *how far* past the line a cell is. Under a
+`min=0` rule the failing row might be `amount=-9`, but the interesting repro is
+the last value that still fails:
+
+```python
+from pycheck import minimize_values
+from pycheck.ext.dataframely import as_predicate, diagnose
+
+found = diagnose(df, HouseSchema)  # repro + why (rule 'amount|min')
+reduced = minimize_values(found, as_predicate(HouseSchema))
+
+reduced.repro.frame  # amount == -1 -- the boundary, not -9
+reduced.proven  # True: -1 is the failing value next to passing
+reduced.column  # 'amount'
+reduced.direction  # 'increase'
+```
+
+`minimize_values` reads the column from the diagnosis and the search direction
+from the rule name (`min`/`greater` → increase, `max`/`less` → decrease). Pass a
+bare `Repro` instead with `column=` and `direction=`:
+
+```python
+minimize_values(repro, fails, column="amount", direction="increase")
+```
+
+It assumes the predicate is monotone *along that column*: moving the value
+toward the valid region flips the failure once and stays passing. When no
+passing value is found, or the budget runs out, the cell is left untouched and
+`proven` is `False` — the step never guesses a boundary it can't show. Integer
+columns land on the adjacent integer, `Float64` on the adjacent float (so a
+`min=0` float cell lands just below zero). Only integer and `Float64` columns
+are supported; a null, `nan`, or `inf` cell is rejected.
+
 ## Fail a test with the repro, not the traceback
 
 `pycheck.ext.pytest.assert_valid` is the pytest-shaped replacement for
@@ -259,8 +294,11 @@ smaller subset reproduces.
 
 - **Not a validator.** It doesn't define or check rules; it runs *after* one
   fails, using your predicate as the oracle.
-- **Rows, not values.** It drops rows; it doesn't minimize a cell to a boundary
-  value, and column reduction isn't built.
+- **Columns, not yet.** It minimizes rows and numeric values, but it doesn't
+  drop whole columns.
+- **Value minimization needs monotonicity.** Moving a cell toward the valid
+  region must flip the failure once. A non-monotone predicate is left unproven,
+  not guessed.
 - **No pipeline attribution.** It won't tell you *which step* (a join, a cast)
   introduced the bad rows.
 - **Needs a pure, deterministic predicate.** Nondeterminism makes shrinking

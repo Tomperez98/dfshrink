@@ -11,7 +11,7 @@ concrete shape and acceptance criteria, and the whole thing is held to one rule 
 **never regress the fail-fast contract** (bugs panic, expected failures return
 values, minimality is reported honestly).
 
-**Status:** Phases 0–1 are shipped (2026-09-27). Phases 2–4 are open.
+**Status:** Phases 0–2 are shipped (2026-09-27). Phases 3–4 are open.
 
 ---
 
@@ -152,7 +152,7 @@ pointblank sells tabular reports. pycheck currently returns a `Repro` (and now a
 
 ---
 
-## Phase 2 — Value/boundary minimization *(closes "rows, not values")*
+## Phase 2 — Value/boundary minimization ✅ DONE
 
 **Why.** The README's first limitation: `shrink_rows` drops rows, it doesn't
 minimize a cell to the threshold where a `>= X`-style rule flips. Program
@@ -179,6 +179,29 @@ kept row down to the smallest value that still fails the predicate.
 
 - For `min=0` and a row with `amount=-9`, `minimize_values` returns `amount=-1`
   (the smallest value that still fails), not `-9`, and marks it proven.
+
+**Shipped.**
+
+- `minimize_values(source, fails, *, column=None, direction=None, max_evals=...)`
+  and the `ValueReduction` result in `src/pycheck/values.py`; exported from
+  `pycheck`. `source` may be a `Diagnosis` (column and rule come from its
+  `failure`) or a bare `Repro`.
+- `direction_for_rule` maps a rule name to a search direction
+  (`min`/`greater`/`positive`/`ge` → increase, `max`/`less`/`negative`/`le` →
+  decrease, else `None`). The search is exponential bracketing plus
+  integer/`Float64` bisection within `max_evals`.
+- `proven` is `False` — and the value left untouched — when no crossing is
+  found or the budget runs out. Null and non-finite cells are rejected; only
+  integer and `Float64` columns are supported.
+- Row 1-minimality is re-checked after the value moves and the repro's
+  `minimality_proven` is set honestly, so a value move can never make the flag a
+  lie.
+- **Deviation from the sketch:** shipped the standalone `minimize_values`
+  (the roadmap's first form), not a `values=True` flag on `diagnose`. Direction
+  is defined as "toward the valid region" (`min=0`, `-9 → -1`), which is what
+  the acceptance criterion requires.
+- Verified: 117 tests pass; `ty check`, `ruff check`, `ruff format --check`
+  clean; `values.py` at 100% coverage.
 
 ---
 
@@ -233,7 +256,7 @@ survives).
 |---|---|---|---|---|
 | 0 | Failure-aware adapters + `diagnose` ✅ | — | **High** | Low–Med (shipped) |
 | 1 | `to_code`/`to_markdown`/pytest helper ✅ | 0 (for the "why" text) | High | Low (shipped) |
-| 2 | Value/boundary minimization | 0 | Med–High | Med (direction/monotonicity) |
+| 2 | Value/boundary minimization ✅ | 0 | Med–High | Med (shipped) |
 | 3 | Column reduction | 0 | Med | Med–High (contract evolution) |
 | 4 | Pipeline attribution | 3 | High ceiling | High (different product) |
 
