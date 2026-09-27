@@ -1,4 +1,4 @@
-"""Per-library adapters that turn validators into failure predicates.
+"""Per-library adapters that turn validators into failure predicates and explainers.
 
 ``pycheck`` core knows nothing about validators: :func:`pycheck.shrink_rows`
 takes a plain ``DataFrame -> bool`` predicate.  Each module here owns the
@@ -11,8 +11,10 @@ library -- the base ``pycheck`` package never does.
 
 Use them as::
 
-    from pycheck.ext.dataframely import shrink_rows
+    from pycheck.ext.dataframely import shrink_rows, diagnose
     repro = shrink_rows(df, HouseSchema)
+    found = diagnose(df, HouseSchema)   # repro + why it failed
 
-Each module also exposes :func:`as_predicate` if you want the raw predicate.
+Each module also exposes :func:`as_predicate` for the raw predicate and
+:func:`as_failure` for the raw ``DataFrame -> Failure | None`` explainer.
 """
