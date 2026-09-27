@@ -10,7 +10,7 @@ person approve the publish step. When a release is split across two halves
 ## One-time setup (do once, before the first release)
 
 1. **PyPI trusted publisher.** On PyPI, add a pending publisher for project
-   `dfshrink`: owner `Tomperez98`, repository `pycheck`, workflow `release.yml`,
+   `dfshrink`: owner `Tomperez98`, repository `dfshrink`, workflow `release.yml`,
    environment `pypi`. No API token is stored anywhere.
 2. **Protected environment.** In GitHub → Settings → Environments, create
    `pypi` with required reviewers, and restrict its deployment branches and tags

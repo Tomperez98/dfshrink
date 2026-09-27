@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-REPO_URL = "https://github.com/Tomperez98/pycheck"
+REPO_URL = "https://github.com/Tomperez98/dfshrink"
 ROOT_MARKDOWN = ("README.md", "CHANGELOG.md", "RELEASING.md", "CONTRIBUTING.md")
 DOCS = REPO / "docs"
 LINK = re.compile(r'\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)')

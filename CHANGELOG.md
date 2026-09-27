@@ -10,7 +10,7 @@ check it against.
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-09-27
 
 The first release. Not yet published to PyPI.
 
@@ -30,5 +30,5 @@ The first release. Not yet published to PyPI.
 - `dfshrink.ext.pytest.assert_valid`: fail a test with the minimal repro
   instead of a traceback.
 
-[Unreleased]: https://github.com/Tomperez98/pycheck/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Tomperez98/pycheck/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Tomperez98/dfshrink/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Tomperez98/dfshrink/releases/tag/v0.1.0

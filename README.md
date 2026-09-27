@@ -69,15 +69,15 @@ analog of R's `minex::reduce_rows`.
 
 ## Install
 
-Not on PyPI yet — install from a checkout:
-
 ```bash
-uv sync            # or: pip install -e .
+pip install dfshrink        # or: uv add dfshrink
 ```
 
 Requires Python 3.12+ and Polars. The base package imports only Polars; each
-validator adapter is an extra (`uv sync --extra dataframely`, `--extra pandera`,
-`--extra patito`).
+validator adapter is an extra (`pip install "dfshrink[dataframely]"`,
+`dfshrink[pandera]`, `dfshrink[patito]`).
+
+Developing dfshrink itself? From a checkout, `mise install && mise run setup`.
 
 **If you can write the failing rule as a per-row mask, use `.filter()` — it's
 simpler.** Shrinking is for when you can't: a validator that returns a single bit
@@ -169,10 +169,10 @@ repro = shrink_rows(df, House)
 Each module also exposes `as_predicate` for the raw `DataFrame -> bool`. The
 frame must already match the schema's columns and dtypes — shrinking only removes
 rows, so a structural mismatch is the caller's bug. Runnable versions:
-[`examples/dataframely_schema.py`](https://github.com/Tomperez98/pycheck/blob/main/examples/dataframely_schema.py),
-[`examples/pandera_schema.py`](https://github.com/Tomperez98/pycheck/blob/main/examples/pandera_schema.py),
-[`examples/patito_schema.py`](https://github.com/Tomperez98/pycheck/blob/main/examples/patito_schema.py), and the
-dependency-free [`examples/predicate.py`](https://github.com/Tomperez98/pycheck/blob/main/examples/predicate.py).
+[`examples/dataframely_schema.py`](https://github.com/Tomperez98/dfshrink/blob/main/examples/dataframely_schema.py),
+[`examples/pandera_schema.py`](https://github.com/Tomperez98/dfshrink/blob/main/examples/pandera_schema.py),
+[`examples/patito_schema.py`](https://github.com/Tomperez98/dfshrink/blob/main/examples/patito_schema.py), and the
+dependency-free [`examples/predicate.py`](https://github.com/Tomperez98/dfshrink/blob/main/examples/predicate.py).
 
 ## Fast: ~log₂(n) predicate calls
 
@@ -189,7 +189,7 @@ Call counts depend on where the bad rows sit; the range is measured. Candidates
 are selected with `DataFrame.slice`, so copying the frame is not the cost: with a
 cheap predicate, 20,000 rows shrink to one in ~0.25 ms. Cap the predicate calls
 with `max_evals` (default 10,000) —
-[performance in depth →](https://github.com/Tomperez98/pycheck/blob/main/docs/performance.md).
+[performance in depth →](https://github.com/Tomperez98/dfshrink/blob/main/docs/performance.md).
 
 ## Who it's for — and when not to use it
 
@@ -220,12 +220,12 @@ It is deliberately narrow:
 
 The README is the front door; each guide owns one task in depth:
 
-- **[Diagnose the failure](https://github.com/Tomperez98/pycheck/blob/main/docs/diagnose.md)** — get the rule and column the validator flagged, not just the rows.
-- **[Fail with a repro in CI](https://github.com/Tomperez98/pycheck/blob/main/docs/ci.md)** — `assert_valid` turns a failed job into a minimal repro.
-- **[Move the value to the boundary](https://github.com/Tomperez98/pycheck/blob/main/docs/minimize-values.md)** — shrink a bad cell to the last value that still fails.
-- **[Drop the columns the rule does not need](https://github.com/Tomperez98/pycheck/blob/main/docs/minimize-columns.md)** — schema-aware column reduction.
-- **[Performance in depth](https://github.com/Tomperez98/pycheck/blob/main/docs/performance.md)** — call counts, the worst case, and `max_evals`.
-- **[The contract](https://github.com/Tomperez98/pycheck/blob/main/docs/contract.md)** — panic/value semantics, minimality guarantees, and the algorithm.
+- **[Diagnose the failure](https://github.com/Tomperez98/dfshrink/blob/main/docs/diagnose.md)** — get the rule and column the validator flagged, not just the rows.
+- **[Fail with a repro in CI](https://github.com/Tomperez98/dfshrink/blob/main/docs/ci.md)** — `assert_valid` turns a failed job into a minimal repro.
+- **[Move the value to the boundary](https://github.com/Tomperez98/dfshrink/blob/main/docs/minimize-values.md)** — shrink a bad cell to the last value that still fails.
+- **[Drop the columns the rule does not need](https://github.com/Tomperez98/dfshrink/blob/main/docs/minimize-columns.md)** — schema-aware column reduction.
+- **[Performance in depth](https://github.com/Tomperez98/dfshrink/blob/main/docs/performance.md)** — call counts, the worst case, and `max_evals`.
+- **[The contract](https://github.com/Tomperez98/dfshrink/blob/main/docs/contract.md)** — panic/value semantics, minimality guarantees, and the algorithm.
 
 ## Development
 
