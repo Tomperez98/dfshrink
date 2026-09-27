@@ -1,4 +1,4 @@
-"""Tests for the per-library adapters in :mod:`pycheck.ext`.
+"""Tests for the per-library adapters in :mod:`dfshrink.ext`.
 
 Each adapter module imports its real library at import time, so these tests go
 through :func:`pytest.importorskip` and are skipped unless the matching extra
@@ -22,7 +22,7 @@ import pytest
 
 def test_dataframely_predicate_is_inverted() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import as_predicate
+    from dfshrink.ext.dataframely import as_predicate
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -35,7 +35,7 @@ def test_dataframely_predicate_is_inverted() -> None:
 
 def test_dataframely_shrink_rows() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import shrink_rows as shrink_dataframely
+    from dfshrink.ext.dataframely import shrink_rows as shrink_dataframely
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -49,7 +49,7 @@ def test_dataframely_shrink_rows() -> None:
 
 def test_pandera_predicate_raises_means_failing() -> None:
     pa = pytest.importorskip("pandera.polars")
-    from pycheck.ext.pandera import as_predicate
+    from dfshrink.ext.pandera import as_predicate
 
     schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
     predicate = as_predicate(schema)
@@ -60,7 +60,7 @@ def test_pandera_predicate_raises_means_failing() -> None:
 
 def test_pandera_shrink_rows() -> None:
     pa = pytest.importorskip("pandera.polars")
-    from pycheck.ext.pandera import shrink_rows as shrink_pandera
+    from dfshrink.ext.pandera import shrink_rows as shrink_pandera
 
     schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
     repro = shrink_pandera(pl.DataFrame({"amount": [100, 200, -50, 300]}), schema)
@@ -73,7 +73,7 @@ def test_pandera_shrink_rows() -> None:
 def test_pandera_non_schema_error_propagates() -> None:
     """A validator bug (not a schema error) panics instead of reading as "fails"."""
     pytest.importorskip("pandera")
-    from pycheck.ext.pandera import as_predicate
+    from dfshrink.ext.pandera import as_predicate
 
     class Broken:
         def validate(self, df: pl.DataFrame) -> object:
@@ -88,7 +88,7 @@ def test_pandera_non_schema_error_propagates() -> None:
 
 def test_patito_predicate_is_inverted() -> None:
     pt = pytest.importorskip("patito")
-    from pycheck.ext.patito import as_predicate
+    from dfshrink.ext.patito import as_predicate
 
     class House(pt.Model):
         # Annotated rather than ``= pt.Field(...)``: ty strict rejects assigning
@@ -103,7 +103,7 @@ def test_patito_predicate_is_inverted() -> None:
 
 def test_patito_shrink_rows() -> None:
     pt = pytest.importorskip("patito")
-    from pycheck.ext.patito import shrink_rows as shrink_patito
+    from dfshrink.ext.patito import shrink_rows as shrink_patito
 
     class House(pt.Model):
         amount: Annotated[int, pt.Field(ge=0)]
@@ -118,7 +118,7 @@ def test_patito_shrink_rows() -> None:
 def test_patito_non_schema_error_propagates() -> None:
     """A model bug (not invalid data) panics instead of reading as "fails"."""
     pytest.importorskip("patito")
-    from pycheck.ext.patito import as_predicate
+    from dfshrink.ext.patito import as_predicate
 
     class Broken:
         @classmethod

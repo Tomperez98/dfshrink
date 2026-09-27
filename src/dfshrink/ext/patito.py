@@ -22,12 +22,12 @@ try:
     import patito
 except ImportError as exc:  # pragma: no cover - depends on install
     msg = (
-        "pycheck.ext.patito requires patito; install it with "
-        "`uv sync --extra patito` (or `pip install 'pycheck[patito]'`)"
+        "dfshrink.ext.patito requires patito; install it with "
+        "`uv sync --extra patito` (or `pip install 'dfshrink[patito]'`)"
     )
     raise ImportError(msg) from exc
 
-from pycheck.ext._adapter import (
+from dfshrink.ext._adapter import (
     DEFAULT_MAX_EVALS,
     Diagnosis,
     Explainer,

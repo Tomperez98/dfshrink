@@ -23,12 +23,12 @@ try:
     import pandera.errors
 except ImportError as exc:  # pragma: no cover - depends on install
     msg = (
-        "pycheck.ext.pandera requires pandera; install it with "
-        "`uv sync --extra pandera` (or `pip install 'pycheck[pandera]'`)"
+        "dfshrink.ext.pandera requires pandera; install it with "
+        "`uv sync --extra pandera` (or `pip install 'dfshrink[pandera]'`)"
     )
     raise ImportError(msg) from exc
 
-from pycheck.ext._adapter import (
+from dfshrink.ext._adapter import (
     DEFAULT_MAX_EVALS,
     Diagnosis,
     Explainer,

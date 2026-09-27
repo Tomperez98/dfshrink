@@ -14,7 +14,7 @@ from __future__ import annotations
 import dataframely as dy
 import polars as pl
 
-from pycheck.ext.dataframely import shrink_rows
+from dfshrink.ext.dataframely import shrink_rows
 
 
 class HouseSchema(dy.Schema):

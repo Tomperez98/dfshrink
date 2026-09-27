@@ -1,5 +1,5 @@
 [project]
-name = "pycheck"
+name = "dfshrink"
 version = "0.1.0"
 description = "Turn a failing Polars DataFrame into a minimal reproducible example"
 readme = "README.md"

@@ -1,9 +1,9 @@
 """Render a repro as pasteable code, a markdown table, or a failure line.
 
-:meth:`pycheck.Repro.to_code` and :meth:`pycheck.Repro.to_markdown` are the
-public entry points; this module holds the formatting so :mod:`pycheck.shrink`
+:meth:`dfshrink.Repro.to_code` and :meth:`dfshrink.Repro.to_markdown` are the
+public entry points; this module holds the formatting so :mod:`dfshrink.shrink`
 stays about the algorithm.  :func:`render_diagnosis_markdown` folds the
-:class:`~pycheck.Failure` into the same report, so a ticket reads *why* a frame
+:class:`~dfshrink.Failure` into the same report, so a ticket reads *why* a frame
 failed and shows the row that does it.
 
 Rendering is **lossless or loud**: :func:`render_code` rebuilds the frame from
@@ -25,7 +25,7 @@ import polars as pl
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from pycheck.failure import Diagnosis, Failure
+    from dfshrink.failure import Diagnosis, Failure
 
 
 def render_code(frame: pl.DataFrame) -> str:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from pycheck import shrink_rows
+from dfshrink import shrink_rows
 
 
 def has_negative(df: pl.DataFrame) -> bool:

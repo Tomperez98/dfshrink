@@ -51,7 +51,7 @@ from typing import override
 
 import polars as pl
 
-from pycheck._render import render_code, render_markdown
+from dfshrink._render import render_code, render_markdown
 
 DEFAULT_MAX_EVALS = 10_000
 """Default cap on predicate calls; bounds every ``shrink_rows`` invocation."""
@@ -135,7 +135,7 @@ def shrink_rows(
     ``fails`` is a predicate ``DataFrame -> bool`` reporting whether the
     failure is present.  To shrink against a validator instead, pass its
     ``.is_valid`` / ``.validate`` through the matching adapter in
-    :mod:`pycheck.ext` (``pycheck.ext.dataframely``, ``pycheck.ext.pandera``)
+    :mod:`dfshrink.ext` (``dfshrink.ext.dataframely``, ``dfshrink.ext.pandera``)
     -- so ``shrink_rows(df, schema_predicate)`` just works.
 
     Returns ``None`` when the input frame does not fail.  See the module
@@ -149,8 +149,9 @@ def shrink_rows(
         raise ValueError(msg)
 
     tracker = _PredicateTracker(frame, fails, max_evals)
+    # The full frame is a consecutive run, so the baseline takes the slice path.
     current = tuple(range(frame.height))
-    if not tracker.holds_on(current):
+    if not tracker.holds_on_chunk(current):
         return None
 
     n = 2
@@ -184,14 +185,17 @@ def _reduce_once(
     """
     chunks = _split(current, n)
     for _, _, chunk in chunks:
-        if tracker.holds_on(chunk):
+        if tracker.holds_on_chunk(chunk):
             return chunk, 2
+        if tracker.exhausted:
+            return None, n
     for start, stop, _ in chunks:
         # Chunks partition ``current`` contiguously, so a chunk's complement is
         # the two outer slices of ``current`` -- no set membership scan.
-        complement = current[:start] + current[stop:]
-        if complement and tracker.holds_on(complement):
-            return complement, max(n - 1, 2)
+        if tracker.holds_on_complement(current, start, stop):
+            return current[:start] + current[stop:], max(n - 1, 2)
+        if tracker.exhausted:
+            return None, n
     return None, n
 
 
@@ -214,8 +218,30 @@ def _split(rows: tuple[int, ...], n: int) -> tuple[_Chunk, ...]:
 
 
 def _take_rows(frame: pl.DataFrame, rows: tuple[int, ...]) -> pl.DataFrame:
-    """Select rows by position.  ``rows`` is ascending, so order is preserved."""
+    """Select rows by position.  ``rows`` is ascending, so order is preserved.
+
+    A consecutive run selects with ``DataFrame.slice`` (a near-zero-copy view)
+    instead of materialising an index vector, which is where a cheap predicate
+    spends most of its time.
+    """
+    if _consecutive(rows):
+        return frame.slice(rows[0], len(rows))
     return frame[list(rows)]
+
+
+def _without_row(frame: pl.DataFrame, row: int) -> pl.DataFrame:
+    """``frame`` minus the row at position ``row``, without materialising an index vector.
+
+    Dropping a row is the inner loop of the 1-minimality safety net in
+    :mod:`dfshrink.values` and :mod:`dfshrink.columns`; two slices plus a concat
+    avoid rebuilding a Python index list and a gather for every row.
+    """
+    return pl.concat([frame.slice(0, row), frame.slice(row + 1, frame.height - row - 1)])
+
+
+def _consecutive(rows: tuple[int, ...]) -> bool:
+    """Whether ``rows`` is a run of consecutive positions (so a slice is exact)."""
+    return bool(rows) and rows[-1] - rows[0] + 1 == len(rows)
 
 
 class _PredicateTracker:
@@ -244,17 +270,55 @@ class _PredicateTracker:
         self.exhausted = False
         self._last_true: tuple[int, ...] | None = None
 
-    def holds_on(self, rows: Sequence[int]) -> bool:
-        """Return whether ``rows`` still fail, within the budget.
+    def holds_on_chunk(self, chunk: tuple[int, ...]) -> bool:
+        """Evaluate a contiguous ddmin chunk, slicing when the run is consecutive.
 
-        A truthy non-``bool`` return is coerced with ``bool()``; returning
-        ``None`` is a predicate bug and panics rather than reading as a miss.
+        A chunk is a contiguous slice of the current candidate, so its positions
+        are usually consecutive in the frame; ``DataFrame.slice`` then avoids
+        building an index vector for every predicate call.
         """
+        if self._exhausted_now():
+            return False
+        candidate = (
+            self._frame.slice(chunk[0], len(chunk))
+            if _consecutive(chunk)
+            else self._frame[list(chunk)]
+        )
+        return self._evaluate(candidate, chunk)
+
+    def holds_on_complement(self, current: tuple[int, ...], start: int, stop: int) -> bool:
+        """Evaluate ``current`` minus its ``[start, stop)`` slice.
+
+        When ``current`` is a consecutive run, its complement is two consecutive
+        runs, so two frame slices concatenate into the candidate -- again saving
+        the index vector that dominates a cheap predicate.  A gapped ``current``
+        falls back to a gather.
+        """
+        if self._exhausted_now():
+            return False
+        rows = current[:start] + current[stop:]
+        if _consecutive(current):
+            base = current[0]
+            candidate = pl.concat(
+                [
+                    self._frame.slice(base, start),
+                    self._frame.slice(base + stop, len(current) - stop),
+                ]
+            )
+        else:
+            candidate = self._frame[list(rows)]
+        return self._evaluate(candidate, rows)
+
+    def _exhausted_now(self) -> bool:
+        """Charge nothing, but latch :attr:`exhausted` once the budget is spent."""
         if self.calls >= self._max_evals:
             self.exhausted = True
-            return False
+        return self.exhausted
+
+    def _evaluate(self, candidate: pl.DataFrame, rows: Sequence[int]) -> bool:
+        """Run ``fails`` on ``candidate``, charge the budget, and track the last hit."""
         self.calls += 1
-        result = self._fails(self._frame[list(rows)])
+        result = self._fails(candidate)
         if result is None:
             msg = "fails returned None; the contract requires a bool"
             raise TypeError(msg)

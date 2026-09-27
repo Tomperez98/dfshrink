@@ -1,4 +1,4 @@
-"""Tests for :func:`pycheck.minimize_values` (Phase 2: value/boundary minimization).
+"""Tests for :func:`dfshrink.minimize_values` (Phase 2: value/boundary minimization).
 
 Shrinking drops rows; this step moves the flagged column's values to the failing
 boundary.  The contract tests below pin the boundary, the direction inference,
@@ -16,7 +16,7 @@ import polars as pl
 import pytest
 from hypothesis import given, settings, strategies as st
 
-from pycheck import Repro, ValueReduction, direction_for_rule, minimize_values, shrink_rows
+from dfshrink import Repro, ValueReduction, direction_for_rule, minimize_values, shrink_rows
 
 NEGATIVE = lambda d: bool((d["amount"] < 0).any())  # noqa: E731
 POSITIVE = lambda d: bool((d["amount"] > 0).any())  # noqa: E731
@@ -88,7 +88,7 @@ def test_direction_for_rule_reads_the_rule_name(rule: str | None, expected: str 
 
 def test_diagnosis_supplies_column_and_direction() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import as_predicate, diagnose
+    from dfshrink.ext.dataframely import as_predicate, diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -181,7 +181,7 @@ def test_no_crossing_leaves_the_value_and_reports_unproven() -> None:
 
 
 def test_row_minimality_safety_net_flags_a_removable_row() -> None:
-    from pycheck.values import _rows_still_minimal, _Tracker
+    from dfshrink.values import _rows_still_minimal, _Tracker
 
     frame = pl.DataFrame({"amount": [-1, -1]})
 
@@ -314,7 +314,7 @@ def test_predicate_returning_none_is_rejected() -> None:
 
 
 def test_step_nextafter_and_overflow_guards() -> None:
-    from pycheck.values import _step
+    from dfshrink.values import _step
 
     # Adding 1.0 to a huge float does not move it, so a one-ulp step is taken.
     assert _step(1e300, 1.0, "increase", None) > 1e300
@@ -323,7 +323,7 @@ def test_step_nextafter_and_overflow_guards() -> None:
 
 
 def test_mid_nextafter_guard_for_an_overflowing_span() -> None:
-    from pycheck.values import _mid
+    from dfshrink.values import _mid
 
     assert _mid(1e308, -1e308, None) < 1e308
 

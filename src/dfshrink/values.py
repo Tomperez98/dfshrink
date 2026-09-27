@@ -1,6 +1,6 @@
 """Pull a failing cell to the boundary where its rule starts to hold.
 
-:func:`pycheck.shrink_rows` drops rows; :func:`minimize_values` keeps them and
+:func:`dfshrink.shrink_rows` drops rows; :func:`minimize_values` keeps them and
 pushes the flagged column's values to the edge of the failing region.  Under a
 ``min=0`` rule a ``-9`` becomes ``-1`` -- the last value that still fails, and so
 the smallest repro of the *value*, not just of the rows.
@@ -22,8 +22,8 @@ from typing import Any, Literal, override
 
 import polars as pl
 
-from pycheck.failure import Diagnosis
-from pycheck.shrink import DEFAULT_MAX_EVALS, FailPredicate, Repro
+from dfshrink.failure import Diagnosis
+from dfshrink.shrink import DEFAULT_MAX_EVALS, FailPredicate, Repro, _without_row
 
 type Direction = Literal["increase", "decrease"]
 """Which way to move a value, toward the region where the rule holds."""
@@ -114,8 +114,8 @@ def minimize_values(
     """Move the flagged column's values to the failing boundary.
 
     ``fails`` is the same failure predicate used for shrinking.  ``source`` may
-    be a :class:`~pycheck.Diagnosis` (then ``column`` and the rule that picks the
-    direction come from its ``failure``) or a bare :class:`~pycheck.Repro` (then
+    be a :class:`~dfshrink.Diagnosis` (then ``column`` and the rule that picks the
+    direction come from its ``failure``) or a bare :class:`~dfshrink.Repro` (then
     pass ``column`` and either ``direction`` or a rule-derived direction).
 
     Contract:
@@ -352,8 +352,7 @@ def _with_cell(
 def _rows_still_minimal(frame: pl.DataFrame, tracker: _Tracker) -> bool:
     """Re-check that dropping any single row still passes (monotone value moves kept it)."""
     for row in range(frame.height):
-        without = frame[[other for other in range(frame.height) if other != row]]
-        outcome = tracker.holds_on(without)
+        outcome = tracker.holds_on(_without_row(frame, row))
         if outcome is None or outcome:
             return False
     return True

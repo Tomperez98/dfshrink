@@ -13,8 +13,8 @@ import datetime
 import polars as pl
 import pytest
 
-from pycheck import Diagnosis, Failure, Repro, shrink_rows
-from pycheck._render import describe_failure
+from dfshrink import Diagnosis, Failure, Repro, shrink_rows
+from dfshrink._render import describe_failure
 
 
 def repro(frame: pl.DataFrame) -> Repro:

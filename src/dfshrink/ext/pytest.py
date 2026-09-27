@@ -8,8 +8,8 @@ minimal repro -- instead of the validator's raw traceback.
 Pass the adapter's ``diagnose`` as the seam, so this module imports no validator
 library::
 
-    from pycheck.ext.dataframely import diagnose
-    from pycheck.ext.pytest import assert_valid
+    from dfshrink.ext.dataframely import diagnose
+    from dfshrink.ext.pytest import assert_valid
 
     def test_house_schema(df):
         assert_valid(df, HouseSchema, diagnose=diagnose)
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pycheck.ext._adapter import DEFAULT_MAX_EVALS, Diagnose, Diagnosis
+from dfshrink.ext._adapter import DEFAULT_MAX_EVALS, Diagnose, Diagnosis
 
 if TYPE_CHECKING:
     import polars as pl
@@ -36,14 +36,16 @@ def assert_valid[SchemaT](
     *,
     diagnose: Diagnose[SchemaT],
     max_evals: int = DEFAULT_MAX_EVALS,
+    columns: bool = False,
 ) -> None:
     """Return ``None`` when ``frame`` passes ``schema``; else fail the test.
 
     On failure, raises ``AssertionError`` whose message names the failing
     rule/column (Phase 0) and shows the minimal repro table
-    (:meth:`pycheck.Diagnosis.to_markdown`).
+    (:meth:`dfshrink.Diagnosis.to_markdown`).  Pass ``columns=True`` to also
+    strip columns the failing rule does not need from the shown repro.
     """
-    found: Diagnosis | None = diagnose(frame, schema, max_evals=max_evals)
+    found: Diagnosis | None = diagnose(frame, schema, max_evals=max_evals, columns=columns)
     if found is None:
         return
     raise AssertionError(found.to_markdown())

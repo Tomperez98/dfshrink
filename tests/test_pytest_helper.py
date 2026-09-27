@@ -1,4 +1,4 @@
-"""Tests for :func:`pycheck.ext.pytest.assert_valid`.
+"""Tests for :func:`dfshrink.ext.pytest.assert_valid`.
 
 The helper is the pytest-shaped seam: pass any adapter's ``diagnose`` and it
 either returns silently or fails the test with the rule/column and the minimal
@@ -13,8 +13,8 @@ import pytest
 
 def test_assert_valid_passes_silently_when_valid() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
-    from pycheck.ext.pytest import assert_valid
+    from dfshrink.ext.dataframely import diagnose
+    from dfshrink.ext.pytest import assert_valid
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -24,8 +24,8 @@ def test_assert_valid_passes_silently_when_valid() -> None:
 
 def test_assert_valid_fails_with_the_rule_and_the_repro() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
-    from pycheck.ext.pytest import assert_valid
+    from dfshrink.ext.dataframely import diagnose
+    from dfshrink.ext.pytest import assert_valid
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)

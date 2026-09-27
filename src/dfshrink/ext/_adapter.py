@@ -1,7 +1,7 @@
-"""Shared plumbing for the per-library adapters in :mod:`pycheck.ext`.
+"""Shared plumbing for the per-library adapters in :mod:`dfshrink.ext`.
 
 Every adapter module turns one validator's failure signal into a
-``DataFrame -> bool`` predicate and hands it to :func:`pycheck.shrink_rows`.
+``DataFrame -> bool`` predicate and hands it to :func:`dfshrink.shrink_rows`.
 The predicate is library-specific; the shrink call is not.  Adapters build
 their public ``shrink_rows`` from :func:`make_shrink_rows`, so the wrapper --
 including the keyword-only ``max_evals`` and its default -- is written once and
@@ -17,8 +17,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from pycheck.failure import Diagnosis, Explainer, Failure
-from pycheck.shrink import (
+from dfshrink.columns import minimize_columns
+from dfshrink.failure import Diagnosis, Explainer, Failure
+from dfshrink.shrink import (
     DEFAULT_MAX_EVALS,
     FailPredicate,
     Repro,
@@ -45,7 +46,7 @@ __all__ = [
 
 
 class ShrinkRows[SchemaT](Protocol):
-    """A schema-aware :func:`pycheck.shrink_rows` bound to one library's predicate."""
+    """A schema-aware :func:`dfshrink.shrink_rows` bound to one library's predicate."""
 
     def __call__(
         self,
@@ -57,7 +58,7 @@ class ShrinkRows[SchemaT](Protocol):
 
 
 class Diagnose[SchemaT](Protocol):
-    """A schema-aware :func:`pycheck.ext.<lib>.diagnose` bound to one library."""
+    """A schema-aware :func:`dfshrink.ext.<lib>.diagnose` bound to one library."""
 
     def __call__(
         self,
@@ -65,6 +66,7 @@ class Diagnose[SchemaT](Protocol):
         schema: SchemaT,
         *,
         max_evals: int = DEFAULT_MAX_EVALS,
+        columns: bool = False,
     ) -> Diagnosis | None: ...
 
 
@@ -74,8 +76,8 @@ def make_shrink_rows[SchemaT](
     """Build the ``shrink_rows(frame, schema, *, max_evals)`` wrapper for an adapter.
 
     ``as_predicate`` maps a library schema to the failure predicate
-    :func:`pycheck.shrink_rows` minimizes; the returned callable re-applies it
-    on each invocation.  See :func:`pycheck.shrink_rows` for the full contract.
+    :func:`dfshrink.shrink_rows` minimizes; the returned callable re-applies it
+    on each invocation.  See :func:`dfshrink.shrink_rows` for the full contract.
     """
 
     def shrink_rows(
@@ -86,7 +88,7 @@ def make_shrink_rows[SchemaT](
     ) -> Repro | None:
         """Shrink ``frame`` to a minimal row subset that still fails ``schema``.
 
-        A thin wrapper over :func:`pycheck.shrink_rows`; see there for the full
+        A thin wrapper over :func:`dfshrink.shrink_rows`; see there for the full
         contract.
         """
         return _shrink_rows(frame, as_predicate(schema), max_evals=max_evals)
@@ -102,12 +104,12 @@ def make_diagnose[SchemaT](
 
     ``as_failure`` maps a schema to its failure explainer (``DataFrame ->
     Failure | None``); ``as_predicate`` maps it to the failure predicate
-    :func:`pycheck.shrink_rows` minimizes.  ``diagnose`` explains first and
+    :func:`dfshrink.shrink_rows` minimizes.  ``diagnose`` explains first and
     shrinks second: when the explainer reports the invalid rows, shrinking
     starts there instead of over the whole frame, so the validator's own
     failure signal -- not black-box ddmin -- pinpoints the repro.
 
-    Contract (same shape as :func:`pycheck.shrink_rows`):
+    Contract (same shape as :func:`dfshrink.shrink_rows`):
 
     * Preconditions -- caller's bug, so panic: an empty ``frame`` or
       ``max_evals < 1`` raises ``ValueError``.
@@ -117,6 +119,9 @@ def make_diagnose[SchemaT](
       ``minimality_proven`` is ``True``.
     * A validator that reports a failure the predicate does not reproduce is
       an adapter bug and panics.
+    * ``columns=True`` removes columns no failing rule needs (see
+      :func:`dfshrink.minimize_columns`), preserving the diagnosed failure; the
+      column search gets its own ``max_evals`` budget.
     """
 
     def diagnose(
@@ -124,12 +129,17 @@ def make_diagnose[SchemaT](
         schema: SchemaT,
         *,
         max_evals: int = DEFAULT_MAX_EVALS,
+        columns: bool = False,
     ) -> Diagnosis | None:
         """Explain and shrink ``frame`` against ``schema``.
 
         Returns ``None`` when the frame passes, else a :class:`Diagnosis` with
         the minimal failing repro and the reason it fails (when the validator
-        exposes one).  See :func:`pycheck.shrink_rows` for the repro contract.
+        exposes one).  See :func:`dfshrink.shrink_rows` for the repro contract.
+
+        With ``columns=True`` the repro is additionally reduced along columns
+        via :func:`dfshrink.minimize_columns`, keeping the same failing rule; the
+        column search spends its own ``max_evals`` budget after the row search.
         """
         if frame.height < 1:
             msg = f"frame must have at least one row, got {frame.height}"
@@ -138,7 +148,8 @@ def make_diagnose[SchemaT](
             msg = f"max_evals must be >= 1, got {max_evals}"
             raise ValueError(msg)
 
-        failure = as_failure(schema)(frame)
+        explainer = as_failure(schema)
+        failure = explainer(frame)
         if failure is None:
             return None
 
@@ -147,6 +158,11 @@ def make_diagnose[SchemaT](
         assert repro is not None, (
             "diagnose: the validator reported a failure the predicate does not reproduce"
         )
+        if columns:
+            reduced = minimize_columns(
+                Diagnosis(repro=repro, failure=failure), explainer, max_evals=max_evals
+            )
+            repro = reduced.repro
         return Diagnosis(repro=repro, failure=failure)
 
     return diagnose
