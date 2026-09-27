@@ -60,8 +60,12 @@ jobs:
           path: dist
       # No caches, and no dependency install: the only credentialed step uploads
       # bytes this job did not build. Every precondition is re-checked here,
-      # after the approval, right before the first upload.
+      # after the approval, right before the first upload. The token is mapped
+      # explicitly: Actions does not export GITHUB_TOKEN to steps on its own.
       - run: python scripts/release.py publish --manifest dist/release.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
   verify:
     name: verify from PyPI
