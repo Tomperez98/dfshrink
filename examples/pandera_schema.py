@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandera.polars as pa
 import polars as pl
 
-from pycheck.ext.pandera import shrink_rows
+from dfshrink.ext.pandera import shrink_rows
 
 
 class Accounts(pa.DataFrameModel):

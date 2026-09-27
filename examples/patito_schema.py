@@ -14,7 +14,7 @@ from __future__ import annotations
 import patito as pt
 import polars as pl
 
-from pycheck.ext.patito import shrink_rows
+from dfshrink.ext.patito import shrink_rows
 
 
 class House(pt.Model):

@@ -1,6 +1,6 @@
-"""Tests for :func:`pycheck.ext.<lib>.diagnose` (Phase 0: failure-aware adapters).
+"""Tests for :func:`dfshrink.ext.<lib>.diagnose` (Phase 0: failure-aware adapters).
 
-``diagnose`` returns a :class:`pycheck.Diagnosis` -- the minimal failing repro
+``diagnose`` returns a :class:`dfshrink.Diagnosis` -- the minimal failing repro
 *plus* the rule/column/rows the validator reported.  These tests pin that the
 explainer surfaces the validator's own failure signal, and that ``diagnose``
 keeps ``shrink_rows`` semantics (same minimal repro, bugs panic, expected
@@ -19,7 +19,7 @@ import pytest
 
 def test_dataframely_diagnose_explains_rule_and_column() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose, shrink_rows
+    from dfshrink.ext.dataframely import diagnose, shrink_rows
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -44,7 +44,7 @@ def test_dataframely_diagnose_explains_rule_and_column() -> None:
 
 def test_dataframely_diagnose_returns_none_when_valid() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -55,7 +55,7 @@ def test_dataframely_diagnose_returns_none_when_valid() -> None:
 def test_dataframely_diagnose_reports_structural_failure_without_rows() -> None:
     """A missing column is a structural failure: no invalid rows to report."""
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -73,7 +73,7 @@ def test_dataframely_diagnose_reports_structural_failure_without_rows() -> None:
 
 def test_pandera_diagnose_explains_rule_and_column() -> None:
     pa = pytest.importorskip("pandera.polars")
-    from pycheck.ext.pandera import diagnose, shrink_rows
+    from dfshrink.ext.pandera import diagnose, shrink_rows
 
     schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
     df = pl.DataFrame({"amount": [100, 200, -50, 300]})
@@ -95,7 +95,7 @@ def test_pandera_diagnose_explains_rule_and_column() -> None:
 
 def test_pandera_diagnose_returns_none_when_valid() -> None:
     pa = pytest.importorskip("pandera.polars")
-    from pycheck.ext.pandera import diagnose
+    from dfshrink.ext.pandera import diagnose
 
     schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
     assert diagnose(pl.DataFrame({"amount": [1, 2, 3]}), schema) is None
@@ -103,7 +103,7 @@ def test_pandera_diagnose_returns_none_when_valid() -> None:
 
 def test_pandera_diagnose_reports_structural_failure_without_rows() -> None:
     pa = pytest.importorskip("pandera.polars")
-    from pycheck.ext.pandera import diagnose
+    from dfshrink.ext.pandera import diagnose
 
     schema = pa.DataFrameSchema({"amount": pa.Column(int, pa.Check.gt(0))})
 
@@ -121,7 +121,7 @@ def test_pandera_diagnose_reports_structural_failure_without_rows() -> None:
 def test_patito_diagnose_reports_column_but_no_rows() -> None:
     """Patito names the column but not the failing rows, so shrinking falls back."""
     pt = pytest.importorskip("patito")
-    from pycheck.ext.patito import diagnose, shrink_rows
+    from dfshrink.ext.patito import diagnose, shrink_rows
 
     class House(pt.Model):
         amount: Annotated[int, pt.Field(ge=0)]
@@ -144,7 +144,7 @@ def test_patito_diagnose_reports_column_but_no_rows() -> None:
 
 def test_patito_diagnose_returns_none_when_valid() -> None:
     pt = pytest.importorskip("patito")
-    from pycheck.ext.patito import diagnose
+    from dfshrink.ext.patito import diagnose
 
     class House(pt.Model):
         amount: Annotated[int, pt.Field(ge=0)]
@@ -157,7 +157,7 @@ def test_patito_diagnose_returns_none_when_valid() -> None:
 
 def test_diagnose_rejects_empty_frame() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -168,7 +168,7 @@ def test_diagnose_rejects_empty_frame() -> None:
 
 def test_diagnose_rejects_non_positive_budget() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -182,7 +182,7 @@ def test_diagnose_rejects_non_positive_budget() -> None:
 
 def test_diagnosis_summary_names_the_rule_and_column() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -196,7 +196,7 @@ def test_diagnosis_summary_names_the_rule_and_column() -> None:
 
 def test_diagnosis_markdown_folds_in_the_reason() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)
@@ -212,7 +212,7 @@ def test_diagnosis_markdown_folds_in_the_reason() -> None:
 
 def test_failure_repr_does_not_dump_the_frame() -> None:
     dy = pytest.importorskip("dataframely")
-    from pycheck.ext.dataframely import diagnose
+    from dfshrink.ext.dataframely import diagnose
 
     class HouseSchema(dy.Schema):
         amount = dy.Int64(nullable=False, min=0)

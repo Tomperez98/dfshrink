@@ -6,9 +6,9 @@ pairs a minimal failing repro with that reason, so "here is a failing frame"
 becomes "column ``amount`` fails rule ``min``, and here is one row that does
 it".
 
-These types are validator-agnostic: :mod:`pycheck` imports no validation
-library.  The per-library adapters in :mod:`pycheck.ext` build them, and
-:func:`pycheck.ext.<lib>.diagnose` returns them.
+These types are validator-agnostic: :mod:`dfshrink` imports no validation
+library.  The per-library adapters in :mod:`dfshrink.ext` build them, and
+:func:`dfshrink.ext.<lib>.diagnose` returns them.
 """
 
 from __future__ import annotations
@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING, override
 
 import polars as pl
 
-from pycheck._render import describe_failure, render_diagnosis_markdown
+from dfshrink._render import describe_failure, render_diagnosis_markdown
 
 if TYPE_CHECKING:
-    from pycheck.shrink import Repro
+    from dfshrink.shrink import Repro
 
 type Explainer = Callable[[pl.DataFrame], Failure | None]
 """A ``DataFrame -> Failure | None`` callable: ``None`` while the frame passes,
@@ -33,7 +33,7 @@ a :class:`Failure` while it fails.  Built per-library by ``as_failure``."""
 class Failure:
     """Why a frame failed, as the validator reported it.
 
-    ``eq=False`` for the same reason as :class:`pycheck.Repro`: a
+    ``eq=False`` for the same reason as :class:`dfshrink.Repro`: a
     :class:`polars.DataFrame` field would otherwise compare element-wise and
     yield a frame, not a bool.
     """
@@ -72,7 +72,7 @@ class Diagnosis:
     """A minimal failing repro plus the reason it fails."""
 
     repro: Repro
-    """The reduced frame that still fails (see :func:`pycheck.shrink_rows`)."""
+    """The reduced frame that still fails (see :func:`dfshrink.shrink_rows`)."""
 
     failure: Failure | None
     """Why it fails, when the validator exposed failure metadata."""

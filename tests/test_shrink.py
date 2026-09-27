@@ -1,4 +1,4 @@
-"""Tests for :mod:`pycheck.shrink`.
+"""Tests for :mod:`dfshrink.shrink`.
 
 Each test follows the contract a production caller follows (TEST.md): narrow
 on the shape first, one test per failure variant, and keep predicate *bugs*
@@ -14,7 +14,7 @@ import polars as pl
 import pytest
 from hypothesis import assume, given, settings, strategies as st
 
-from pycheck.shrink import shrink_rows
+from dfshrink.shrink import shrink_rows
 
 
 def frame(*values: int) -> pl.DataFrame:
@@ -177,6 +177,33 @@ def test_budget_boundary_exactly_sufficient_proves_minimality() -> None:
     assert short.predicate_calls == 3
     assert short.frame.height > proven.frame.height
     assert sum_positive(short.frame)
+
+
+def test_budget_exhaustion_in_the_complement_loop_stops_immediately() -> None:
+    # Only the full 4-row frame fails; every proper subset passes.  The budget
+    # runs out at the first complement, which must stop the search rather than
+    # materialising the remaining candidates.
+    original = frame(-1, -1, -1, -1)
+
+    repro = shrink_rows(original, lambda d: d.height == 4, max_evals=3)
+
+    assert repro is not None
+    assert not repro.minimality_proven
+    assert repro.predicate_calls == 3
+    assert repro.frame.equals(original)
+
+
+def test_consecutive_runs_take_a_slice_and_gapped_runs_gather() -> None:
+    from dfshrink.shrink import _consecutive, _take_rows
+
+    df = pl.DataFrame({"id": [0, 1, 2, 3], "x": [5, -1, 4, -1]})
+
+    assert _consecutive((1, 2, 3))
+    assert not _consecutive((0, 2, 3))
+    assert not _consecutive(())
+    # The fast path must be exactly the gather path it replaces.
+    assert _take_rows(df, (1, 2, 3)).equals(df[[1, 2, 3]])
+    assert _take_rows(df, (0, 2, 3)).equals(df[[0, 2, 3]])
 
 
 def test_is_deterministic() -> None:
