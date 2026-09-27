@@ -1,0 +1,47 @@
+[project]
+name = "pycheck"
+version = "0.1.0"
+description = "Turn a failing Polars DataFrame into a minimal reproducible example"
+readme = "README.md"
+authors = [
+    { name = "Tomas Perez Alvarez", email = "tomasperezalvarez@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "polars>=1.44.2",
+]
+
+[project.optional-dependencies]
+dataframely = ["dataframely>=3"]
+pandera = ["pandera>=0.22"]
+patito = ["patito>=0.8.6"]
+validators = [
+    "dataframely>=3",
+    "pandera>=0.22",
+    "patito>=0.8.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+    "ty>=0.0.84",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing --cov-report=term"
+
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.rules]
+# Strictest from the first commit: every diagnostic is an error.
+all = "error"

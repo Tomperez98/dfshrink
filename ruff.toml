@@ -1,0 +1,43 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "A001",
+    "A002",
+    "ANN401",
+    "ARG001",
+    "ARG002",
+    "C901",
+    "COM812",
+    "CPY001",
+    "D101",
+    "D103",
+    "D203",
+    "D213",
+    "D401",
+    "E501",
+    "FBT001",
+    "FBT003",
+    "INP001",
+    "PLC0415",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "PT018",
+    "RET503",
+    "S101",
+    "S105",
+    "S108",
+    "S603",
+]
+
+[lint.flake8-tidy-imports.banned-api]
+"enum".msg = "Do not use Enums. Use typing.Literal or Union types instead to maintain a lightweight API."
+
+[lint.isort]
+combine-as-imports = true
+required-imports = ["from __future__ import annotations"]
