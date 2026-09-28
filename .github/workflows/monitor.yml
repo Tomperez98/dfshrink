@@ -1,6 +1,6 @@
-# Re-check what we do not control on a schedule (MONITOR.md rule 3) and record
-# build metrics (rule 2). The per-commit Python matrix lives in matrix.yml.
-# Failures open an issue so they reach a person (MONITOR.md rule 4).
+# Re-check what we do not control on a schedule. The per-commit Python matrix
+# lives in matrix.yml. Failures open an issue so they reach a person (via the
+# shared notify.yml).
 name: monitor
 
 on:
@@ -25,54 +25,13 @@ jobs:
       # that disappeared or broke surfaces here before a user reports it.
       - run: mise run verify-latest
 
-  metrics:
-    name: build metrics
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - run: mise run setup
-      - name: Record build time and artifact size
-        run: |
-          start="$(date +%s)"
-          mise run build
-          end="$(date +%s)"
-          {
-            echo "### Build metrics (${GITHUB_SHA:0:12})"
-            echo "- build seconds: $((end - start))"
-            echo "- wheels and sdists:"
-            ls -l dist/*.whl dist/*.tar.gz
-          } >> "$GITHUB_STEP_SUMMARY"
-
   notify:
     name: open an issue on failure
-    needs: [verify-latest, metrics]
+    needs: [verify-latest]
     if: failure()
-    runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read
-    steps:
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const title = 'monitor: scheduled check failed';
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `A scheduled monitor run failed.\n\nRun: ${runUrl}\n\nTriage: fix it, close it with a reason, or assign it to someone who can act.`;
-            const { data: issues } = await github.rest.issues.listForRepo({
-              ...context.repo, state: 'open', labels: 'monitor', per_page: 100,
-            });
-            const existing = issues.find((issue) => issue.title === title);
-            if (existing) {
-              await github.rest.issues.createComment({
-                ...context.repo, issue_number: existing.number, body,
-              });
-            } else {
-              await github.rest.issues.create({
-                ...context.repo, title, body, labels: ['monitor'],
-              });
-            }
+    uses: ./.github/workflows/notify.yml
+    with:
+      title: "monitor: scheduled check failed"
+      summary: A scheduled monitor run failed.

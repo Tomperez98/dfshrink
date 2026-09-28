@@ -1,6 +1,6 @@
-# The merge gate (CI.md). The workflow is glue: install the pinned toolchain,
-# then run the same `mise run` tiers a developer runs. Unknown tiers fail, and
-# every commit on main keeps its own result.
+# The merge gate. The workflow is glue: install the pinned toolchain, then run
+# the same `mise run` tiers a developer runs. Unknown tiers fail, and every
+# commit on main keeps its own result.
 name: ci
 
 on:
@@ -58,7 +58,6 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: mise run setup
-      # Exercise the release path on every merge: build everything, publish
-      # nothing (CI.md rule 8).
-      - run: mise run build
+      # Exercise the release path on every merge: `smoke` builds the artifacts
+      # and installs the wheel and sdist into clean venvs, publishing nothing.
       - run: mise run smoke

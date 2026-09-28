@@ -1,8 +1,7 @@
-# Post-merge: run the full Python matrix per commit (MONITOR.md rule 1).
-# The merge gate (ci.yml) runs one Python to stay fast; this catches
-# version-specific breakages the moment a commit lands, before the weekly
-# monitor or a release. Failures open an issue so they reach a person
-# (MONITOR.md rule 4).
+# Post-merge: run the full Python matrix per commit. The merge gate (ci.yml)
+# runs one Python to stay fast; this catches version-specific breakages the
+# moment a commit lands, before the weekly monitor or a release. Failures open
+# an issue so they reach a person (via the shared notify.yml).
 name: matrix
 
 on:
@@ -25,7 +24,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: mise run setup
@@ -35,27 +34,9 @@ jobs:
     name: open an issue on failure
     needs: test
     if: failure()
-    runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read
-    steps:
-      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        with:
-          script: |
-            const title = 'matrix: post-merge check failed';
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `A post-merge matrix run failed.\n\nRun: ${runUrl}\n\nTriage: fix it, close it with a reason, or assign it to someone who can act.`;
-            const { data: issues } = await github.rest.issues.listForRepo({
-              ...context.repo, state: 'open', labels: 'monitor', per_page: 100,
-            });
-            const existing = issues.find((issue) => issue.title === title);
-            if (existing) {
-              await github.rest.issues.createComment({
-                ...context.repo, issue_number: existing.number, body,
-              });
-            } else {
-              await github.rest.issues.create({
-                ...context.repo, title, body, labels: ['monitor'],
-              });
-            }
+    uses: ./.github/workflows/notify.yml
+    with:
+      title: "matrix: post-merge check failed"
+      summary: A post-merge matrix run failed.

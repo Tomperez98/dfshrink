@@ -1,13 +1,14 @@
-"""Build, publish, and verify dfshrink releases (PUBLISH.md).
+"""Build, publish, and verify dfshrink releases.
 
 Every subcommand is safe to run again. ``build`` needs no credentials and runs
-on every merge (CI.md rule 8); ``publish`` checks its preconditions before it
-touches the registry; ``verify`` installs what users actually get.
+on every merge; ``publish`` checks its preconditions before it touches the
+registry; ``verify`` installs what users actually get.
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -26,7 +28,6 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
 CHANGELOG = REPO / "CHANGELOG.md"
-DEFAULT_REPO_SLUG = "Tomperez98/dfshrink"
 VERSION_RE = re.compile(r'(?m)^version = "[^"]+"$')
 SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 VERSION_HEADING_RE = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
@@ -97,6 +98,20 @@ def current_version() -> str:
     return match.group(1)
 
 
+def changelog_notes(version: str) -> str:
+    """Return the release notes for ``version`` from CHANGELOG.md, or fail."""
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    start = re.search(rf"(?m)^## \[{re.escape(version)}\][^\n]*\n", changelog)
+    if start is None:
+        fail(f"CHANGELOG.md has no `## [{version}]` section; add one before releasing")
+    body = changelog[start.end() :]
+    # Stop at the next version heading or the trailing link-reference block.
+    end = re.search(r"(?m)^(?:## \[|\[[^\]]+\]:\s*https?://)", body)
+    if end is not None:
+        body = body[: end.start()]
+    return body.strip() + "\n"
+
+
 def bump_version(current: str, kind: str) -> str:
     """Derive the next SemVer from ``current`` for the given ``kind``."""
     major, minor, patch = version_key(current)
@@ -124,6 +139,12 @@ def stamp_version(version: str) -> str:
     return original
 
 
+def _restore_pyproject(original: str) -> None:
+    """Restore ``pyproject.toml`` if it was stamped (idempotent)."""
+    if PYPROJECT.read_text(encoding="utf-8") != original:
+        PYPROJECT.write_text(original, encoding="utf-8")
+
+
 def expected_artifacts(name: str, version: str) -> list[str]:
     """Return the artifact names a release must contain, written by hand."""
     return [f"{name}-{version}.tar.gz", f"{name}-{version}-py3-none-any.whl"]
@@ -138,17 +159,39 @@ def artifact_names(directory: Path) -> list[str]:
     )
 
 
-def fetch_json(url: str, token: str | None = None) -> tuple[int, Any]:
-    """GET JSON, returning ``(status, body)``; a 404 yields ``(404, None)``."""
+def fetch_json(
+    url: str, token: str | None = None, *, method: str = "GET", payload: Any = None
+) -> tuple[int, Any]:
+    """Call ``url`` with JSON, returning ``(status, body)``; a 404 yields ``(404, None)``.
+
+    Transient failures (network errors and 5xx) are retried with backoff so a
+    momentary outage does not fail a release; re-running is still safe.
+    """
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(url, headers=headers)  # noqa: S310
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            return response.status, json.loads(response.read())
-    except urllib.error.HTTPError as error:
-        return error.code, None
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    for attempt in range(1, 4):
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)  # noqa: S310
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            # Client errors (404, 403, ...) are meaningful, not transient.
+            if error.code < 500:
+                return error.code, None
+            if attempt == 3:
+                return error.code, None
+            say(f"retry: {url} returned HTTP {error.code} (attempt {attempt}/3)")
+        except urllib.error.URLError as error:
+            if attempt == 3:
+                fail(f"network error fetching {url}: {error.reason}")
+            say(f"retry: {url} network error (attempt {attempt}/3): {error.reason}")
+        time.sleep(2 ** (attempt - 1))
+    fail(f"{url}: retries exhausted")  # unreachable; the loop returns or fails
 
 
 def github_token() -> str:
@@ -159,9 +202,33 @@ def github_token() -> str:
     return token
 
 
+def repo_slug() -> str:
+    """Return the GitHub ``owner/repo`` slug, or fail if it cannot be derived."""
+    slug = os.environ.get("GITHUB_REPOSITORY")
+    if slug:
+        return slug
+    url = capture(["git", "remote", "get-url", "origin"])
+    match = re.search(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$", url)
+    if match is None:
+        fail("cannot derive the GitHub repository; set GITHUB_REPOSITORY")
+    return f"{match.group(1)}/{match.group(2)}"
+
+
 def _github(slug: str, path: str) -> tuple[int, Any]:
     """GET an authenticated GitHub API path for ``slug``."""
-    return fetch_json(f"https://api.github.com/repos/{slug}{path}", token=github_token())
+    return _github_api(slug, path)
+
+
+def _github_api(
+    slug: str, path: str, *, method: str = "GET", payload: Any = None
+) -> tuple[int, Any]:
+    """Call the GitHub REST API for ``slug`` (authenticated, JSON)."""
+    return fetch_json(
+        f"https://api.github.com/repos/{slug}{path}",
+        token=github_token(),
+        method=method,
+        payload=payload,
+    )
 
 
 # --- build ------------------------------------------------------------------
@@ -205,10 +272,14 @@ def command_build(args: argparse.Namespace) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     original = stamp_version(version)
+    # Restore the placeholder even if the build is interrupted (e.g. SIGTERM);
+    # only SIGKILL can leave the file stamped, and that is one `git checkout`
+    # away.
+    atexit.register(_restore_pyproject, original)
     try:
         run(["uv", "build", "--out-dir", str(out_dir)])
     finally:
-        PYPROJECT.write_text(original, encoding="utf-8")
+        _restore_pyproject(original)
 
     expected = expected_artifacts(name, version)
     built = artifact_names(out_dir)
@@ -275,14 +346,14 @@ def assert_version_is_newer(name: str, version: str) -> None:
 
 def assert_commit_is_on_main(commit: str) -> None:
     """Assert the commit is an ancestor of ``main``, and that its CI passed."""
-    slug = os.environ.get("GITHUB_REPOSITORY") or DEFAULT_REPO_SLUG
+    slug = repo_slug()
     status, body = _github(slug, f"/compare/main...{commit}")
     if status != 200:
         fail(f"cannot compare main...{commit} on GitHub (HTTP {status})")
     if body.get("status") not in {"behind", "identical"}:
         fail(f"commit {commit[:12]} is not on main (compare status {body.get('status')})")
 
-    status, body = _github(slug, f"/actions/workflows/ci.yml/runs?head_sha={commit}&per_page=20")
+    status, body = _github(slug, f"/actions/workflows/ci.yml/runs?head_sha={commit}&per_page=100")
     if status != 200:
         fail(f"cannot read CI results for {commit[:12]} (HTTP {status})")
     runs = body.get("workflow_runs", [])
@@ -335,28 +406,51 @@ def command_publish(args: argparse.Namespace) -> None:
 # --- verify -----------------------------------------------------------------
 
 
-def local_wheel(dist: Path, name: str, version: str) -> Path:
-    """Return the built wheel for this release, or fail."""
+def local_artifacts(dist: Path, name: str, version: str) -> tuple[Path, Path]:
+    """Return the built wheel and sdist for a release, or fail."""
     wheel = dist / f"{name}-{version}-py3-none-any.whl"
-    if not wheel.is_file():
-        fail(f"expected wheel {wheel} not found; run build first")
-    return wheel
+    sdist = dist / f"{name}-{version}.tar.gz"
+    for artifact in (wheel, sdist):
+        if not artifact.is_file():
+            fail(f"expected artifact {artifact} not found; run build first")
+    return wheel, sdist
+
+
+def install_and_smoke(
+    venv_dir: str, python_version: str, install_args: list[str], version: str
+) -> None:
+    """Install into a clean venv and run the smoke test, retrying the install.
+
+    The install is retried because a just-published release can lag behind the
+    package index for a few seconds; a genuinely broken artifact still fails.
+    """
+    venv = Path(venv_dir).resolve()
+    run(["uv", "venv", "--clear", "--python", python_version, str(venv)])
+    python = venv / "bin" / "python"
+    for attempt in range(1, 4):
+        try:
+            run(["uv", "pip", "install", "--python", str(python), *install_args])
+            break
+        except subprocess.CalledProcessError:
+            if attempt == 3:
+                raise
+            say(f"retry: install of {install_args} failed (attempt {attempt}/3)")
+            time.sleep(2 ** (attempt - 1))
+    run([str(python), "-c", SMOKE.format(version=version)])
 
 
 def command_smoke(args: argparse.Namespace) -> None:
-    """Install the built wheel into a clean venv and smoke-test it."""
+    """Install the built wheel and sdist into clean venvs and smoke-test each."""
     manifest = load_manifest(args.manifest)
     name = str(manifest["name"])
     version = str(manifest["version"])
     dist = Path(args.manifest).resolve().parent
-    wheel = local_wheel(dist, name, version)
+    wheel, sdist = local_artifacts(dist, name, version)
 
-    venv = Path(args.venv_dir).resolve()
-    run(["uv", "venv", "--clear", "--python", args.python, str(venv)])
-    python = venv / "bin" / "python"
-    run(["uv", "pip", "install", "--python", str(python), str(wheel)])
-    run([str(python), "-c", SMOKE.format(version=version)])
+    install_and_smoke(args.venv_dir, args.python, [str(wheel)], version)
     say(f"smoke: {wheel.name} installs and passes")
+    install_and_smoke(args.venv_dir, args.python, [str(sdist)], version)
+    say(f"smoke: {sdist.name} builds, installs, and passes")
 
 
 def command_verify(args: argparse.Namespace) -> None:
@@ -397,12 +491,63 @@ def command_verify(args: argparse.Namespace) -> None:
             if base is not None and str(base["info"]["version"]) != version:
                 fail(f"PyPI 'latest' is {base['info']['version']}, not {version}")
 
-    venv = Path(args.venv_dir).resolve()
-    run(["uv", "venv", "--clear", "--python", args.python, str(venv)])
-    python = venv / "bin" / "python"
-    run(["uv", "pip", "install", "--python", str(python), f"{name}=={version}"])
-    run([str(python), "-c", SMOKE.format(version=version)])
+    install_and_smoke(args.venv_dir, args.python, [f"{name}=={version}"], version)
     say(f"verify: {name} {version} installs and passes a smoke test from PyPI")
+    install_and_smoke(
+        args.venv_dir, args.python, ["--no-binary", name, f"{name}=={version}"], version
+    )
+    say(f"verify: {name} {version} sdist builds, installs, and passes from PyPI")
+
+
+# --- release notes ----------------------------------------------------------
+
+
+def command_notes(args: argparse.Namespace) -> None:
+    """Print the changelog section for a version, to preview the release notes."""
+    version = args.version if args.version is not None else current_version()
+    sys.stdout.write(changelog_notes(version))
+
+
+def command_release(args: argparse.Namespace) -> None:
+    """Create (or update) the GitHub release notes for a built version."""
+    manifest = load_manifest(args.manifest)
+    name = str(manifest["name"])
+    version = str(manifest["version"])
+    notes = changelog_notes(version)
+
+    slug = repo_slug()
+    tag = f"v{version}"
+    status, existing = _github_api(slug, f"/releases/tags/{tag}")
+    if status not in (200, 404):
+        fail(f"cannot read GitHub release {tag} (HTTP {status})")
+
+    title = f"{name} {version}"
+    if status == 404:
+        status, _ = _github_api(
+            slug,
+            "/releases",
+            method="POST",
+            payload={
+                "tag_name": tag,
+                "name": title,
+                "body": notes,
+                "draft": False,
+                "prerelease": False,
+            },
+        )
+        if status not in (200, 201):
+            fail(f"cannot create GitHub release {tag} (HTTP {status})")
+        say(f"release: created GitHub release {tag}")
+        return
+    status, _ = _github_api(
+        slug,
+        f"/releases/{existing['id']}",
+        method="PATCH",
+        payload={"name": title, "body": notes},
+    )
+    if status != 200:
+        fail(f"cannot update GitHub release {tag} (HTTP {status})")
+    say(f"release: updated GitHub release {tag}")
 
 
 # --- bump and changelog -----------------------------------------------------
@@ -482,6 +627,10 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--manifest", default="dist/release.json")
     publish.set_defaults(func=command_publish)
 
+    release = subparsers.add_parser("release", help="create or update the GitHub release notes")
+    release.add_argument("--manifest", default="dist/release.json")
+    release.set_defaults(func=command_release)
+
     verify = subparsers.add_parser("verify", help="install and smoke-test from PyPI")
     verify.add_argument("--manifest", default="dist/release.json")
     verify.add_argument("--python", default="3.12")
@@ -517,6 +666,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     changelog = subparsers.add_parser("changelog", help="list changes since the last tag")
     changelog.set_defaults(func=command_changelog)
+
+    notes = subparsers.add_parser("notes", help="print the release notes for a version")
+    notes.add_argument(
+        "version",
+        nargs="?",
+        default=None,
+        help="version whose notes to print; default: the changelog's top version",
+    )
+    notes.set_defaults(func=command_notes)
     return parser
 
 
