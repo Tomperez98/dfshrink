@@ -10,6 +10,18 @@ check it against.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-28
+
+### Changed
+
+- The release pipeline now install-tests the source distribution and every
+  supported Python version, and retries transient network failures instead of
+  failing outright.
+- Releases now post the versioned changelog section as GitHub release notes
+  automatically.
+- CI builds the package once per dry-run job and shares a single "open an
+  issue on failure" workflow between the matrix and scheduled checks.
+
 ## [0.1.1] - 2026-09-27
 
 ### Added
@@ -37,6 +49,7 @@ The first release.
 - `dfshrink.ext.pytest.assert_valid`: fail a test with the minimal repro
   instead of a traceback.
 
-[Unreleased]: https://github.com/Tomperez98/dfshrink/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Tomperez98/dfshrink/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Tomperez98/dfshrink/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Tomperez98/dfshrink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Tomperez98/dfshrink/releases/tag/v0.1.0
