@@ -1,4 +1,4 @@
-"""Fail on broken repo-local links in Markdown (COMPAT.md rule 8).
+"""Fail on broken repo-local links in Markdown.
 
 External links are left to the network; links that point at files in this repo
 (relative paths, or ``github.com/<owner>/<repo>/blob/main/...`` URLs) must

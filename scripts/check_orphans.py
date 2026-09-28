@@ -1,4 +1,4 @@
-"""Fail when source files drift outside the declared package (COMPAT.md rule 8).
+"""Fail when source files drift outside the declared package.
 
 A repo that renames its package can leave the old tree behind, unreferenced and
 untested. This check makes that state a red build: ``src/`` holds exactly one

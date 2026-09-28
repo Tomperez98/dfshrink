@@ -3,9 +3,9 @@
 The process is scripted and re-runnable. The only manual parts are the two
 decisions: **which commit**, and **go**.
 
-Rotate the release manager so everyone has run a release, and have a second
-person approve the publish step. When a release is split across two halves
-(freezing a candidate, publishing it later), give them to different people.
+The checklist is written down so a release is runnable by anyone — including
+future-you or a new maintainer — without asking the author. The only gate is
+the deliberate approve click in the `pypi` environment (step 5).
 
 ## One-time setup (do once, before the first release)
 
@@ -13,7 +13,7 @@ person approve the publish step. When a release is split across two halves
    `dfshrink`: owner `Tomperez98`, repository `dfshrink`, workflow `release.yml`,
    environment `pypi`. No API token is stored anywhere.
 2. **Protected environment.** In GitHub → Settings → Environments, create
-   `pypi` with required reviewers, and restrict its deployment branches and tags
+   `pypi` with approval required, and restrict its deployment branches and tags
    to tags matching `v*`. Only the `publish` job uses it.
 3. **Default permissions.** In GitHub → Settings → Actions → General, set the
    default `GITHUB_TOKEN` to read-only; each workflow asks for what it needs.
@@ -61,18 +61,25 @@ Run these in order. Each step names the exact command.
    Pushing the tag starts `release.yml`. If the tag does not point at a commit
    that passed CI on `main`, the publish job's preconditions fail.
 
-4. **Let the candidate soak.** `monitor.yml` runs the slow checks and the
-   previous-release upgrade test. Confirm they are green for the tagged SHA
-   before approving. If they are not, delete the tag and skip this release.
+4. **Confirm the candidate is still green.** `matrix.yml` runs the Python
+   matrix for the commit and `monitor.yml` re-checks the published release on a
+   schedule. Confirm the matrix is green for the tagged SHA before approving.
+   If it is not, delete the tag and skip this release.
 
 5. **Approve and publish.** The `publish` job waits for approval in the `pypi`
-   environment. A second person clicks approve. The job re-checks every
-   precondition, then uploads the artifacts built in step 3 — it never rebuilds.
+   environment. Approve it — that click is the "go" decision. The job re-checks
+   every precondition, then uploads the artifacts built in step 3 — it never
+   rebuilds.
 
 6. **Verify what shipped.** The `verify` job downloads from PyPI, compares
-   checksums against the built manifest, installs into a clean virtualenv, and
-   runs a smoke test. Confirm it passed and that `latest` on PyPI is this
-   version.
+   checksums against the built manifest, installs the wheel and sdist into
+   clean virtualenvs on every supported Python version, and runs a smoke test.
+   Confirm it passed and that `latest` on PyPI is this version.
+
+7. **Announce it.** After `verify` passes, the `release` job posts the
+   versioned `CHANGELOG.md` section as the GitHub release notes, so the tag
+   page links a real changelog instead of an empty one. No manual step; re-run
+   the workflow to refresh the notes.
 
 ## If something goes wrong
 
@@ -100,7 +107,8 @@ re-published.
 ## What guards each release
 
 - `release.yml` builds without credentials, then publishes the same bytes from a
-  protected job, then verifies from the outside.
+  protected job, verifies from the outside, then posts the changelog section as
+  the GitHub release notes.
 - The publish preconditions are: the version is new and newer than the latest,
   the commit is on `main`, CI passed for that commit, and the built artifact set
   matches the expected list. A broken precondition stops the release.

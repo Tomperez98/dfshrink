@@ -69,11 +69,11 @@ dev = [
 testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing --cov-report=term"
 markers = [
-    "slow: long-running check; runs on main and on a schedule (MONITOR.md), not on every pull request",
+    "slow: long-running check; runs on main and on a schedule, not on every pull request",
 ]
 
 [tool.uv]
-# Pin the toolchain in one place both a laptop and CI read (CI.md rule 4).
+# Pin the toolchain in one place so a laptop and CI read the same versions.
 required-version = ">=0.12.17,<0.13"
 
 

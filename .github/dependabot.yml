@@ -1,4 +1,4 @@
-# Keep pinned inputs current, in reviewed pull requests (CI.md rule 4).
+# Keep pinned inputs current, in reviewed pull requests.
 version: 2
 updates:
   - package-ecosystem: github-actions
