@@ -1,6 +1,6 @@
 # Every task a developer or CI runs lives here, so `mise run ci` is the same
-# command on a laptop and on a runner (CI.md rule 1). Tool versions live in
-# `.mise.toml` (CI.md rule 4); this file is tasks only.
+# command on a laptop and on a runner. Tool versions are pinned by
+# `.python-version` and `[tool.uv] required-version`; this file is tasks only.
 
 [tasks.setup]
 description = "Install the pinned toolchain and every dependency"
@@ -65,15 +65,15 @@ done
 
 [tasks.build]
 description = "Dry-run the release build; needs no credentials"
-run = "uv run python scripts/release.py build --out-dir dist"
+run = "uv run --no-sync python scripts/release.py build --out-dir dist"
 
 [tasks.smoke]
-description = "Install the built wheel into a clean venv and smoke-test it"
+description = "Install the built wheel and sdist into clean venvs and smoke-test each"
 depends = ["build"]
-run = "uv run python scripts/release.py smoke --manifest dist/release.json"
+run = "uv run --no-sync python scripts/release.py smoke --manifest dist/release.json"
 
 [tasks.ci]
-description = "The merge gate: every tier, in cost order (CI.md rules 2 and 8)"
+description = "The merge gate: every tier, cheapest first; the first failure stops the run"
 run = '''
 set -e
 # Sequential and cheap-first: the first failing tier stops the run.
@@ -83,26 +83,22 @@ for tier in format lint type check test examples smoke; do
 done
 '''
 
-[tasks."release:build"]
-description = "Build and verify the release artifacts (no credentials)"
-run = "uv run python scripts/release.py build --out-dir dist"
-
 [tasks."release:publish"]
-description = "Upload a built release; protected job only (PUBLISH.md)"
-run = "uv run python scripts/release.py publish --manifest dist/release.json"
+description = "Upload a built release; protected job only"
+run = "uv run --no-sync python scripts/release.py publish --manifest dist/release.json"
 
 [tasks."release:verify"]
 description = "Install the published release from PyPI and smoke-test it"
-run = "uv run python scripts/release.py verify --manifest dist/release.json --expect-latest"
+run = "uv run --no-sync python scripts/release.py verify --manifest dist/release.json --expect-latest"
 
 [tasks.verify-latest]
 description = "Install the newest published release and smoke-test it (scheduled)"
-run = "uv run python scripts/release.py verify --latest --venv-dir .smoke"
+run = "uv run --no-sync python scripts/release.py verify --latest --venv-dir .smoke"
 
 [tasks.bump]
 description = "Derive the next version (patch + 1) from the changelog and edit the changelog"
-run = "uv run python scripts/release.py bump"
+run = "uv run --no-sync python scripts/release.py bump"
 
 [tasks.changelog]
 description = "List merged changes since the last tag, to edit into CHANGELOG.md"
-run = "uv run python scripts/release.py changelog"
+run = "uv run --no-sync python scripts/release.py changelog"

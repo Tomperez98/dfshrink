@@ -1,0 +1,46 @@
+# Open an issue so a failed check reaches a person, rather than failing
+# silently. Reused by matrix.yml and monitor.yml; each caller runs this only on
+# `failure()` and passes a title that identifies the check. A repeat failure
+# comments on the existing open issue instead of opening a duplicate.
+name: notify
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        required: true
+        type: string
+        description: "Issue title, also used to de-duplicate against open issues."
+      summary:
+        required: true
+        type: string
+        description: "One-line human description shown at the top of the issue body."
+
+permissions: {}
+
+jobs:
+  notify:
+    name: open an issue on failure
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const title = '${{ inputs.title }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${{ inputs.summary }}\n\nRun: ${runUrl}\n\nTriage: fix it, close it with a reason, or assign it to someone who can act.`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'monitor', per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo, title, body, labels: ['monitor'],
+              });
+            }
