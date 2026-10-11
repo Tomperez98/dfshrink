@@ -137,6 +137,60 @@ wheels = [
 ]
 
 [[package]]
+name = "dfshrink"
+version = "0.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "polars" },
+]
+
+[package.optional-dependencies]
+dataframely = [
+    { name = "dataframely" },
+]
+pandera = [
+    { name = "pandera" },
+]
+patito = [
+    { name = "patito" },
+]
+validators = [
+    { name = "dataframely" },
+    { name = "pandera" },
+    { name = "patito" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "hypothesis" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dataframely", marker = "extra == 'dataframely'", specifier = ">=3" },
+    { name = "dataframely", marker = "extra == 'validators'", specifier = ">=3" },
+    { name = "pandera", marker = "extra == 'pandera'", specifier = ">=0.22" },
+    { name = "pandera", marker = "extra == 'validators'", specifier = ">=0.22" },
+    { name = "patito", marker = "extra == 'patito'", specifier = ">=0.8.6" },
+    { name = "patito", marker = "extra == 'validators'", specifier = ">=0.8.6" },
+    { name = "polars", specifier = ">=1.44.2" },
+]
+provides-extras = ["dataframely", "pandera", "patito", "validators"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "hypothesis", specifier = ">=6.168.2" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "ruff", specifier = ">=0.16.9" },
+    { name = "ty", specifier = ">=0.0.84" },
+]
+
+[[package]]
 name = "hypothesis"
 version = "6.168.2"
 source = { registry = "https://pypi.org/simple" }
@@ -314,7 +368,7 @@ wheels = [
 
 [[package]]
 name = "pandera"
-version = "0.33.1"
+version = "0.34.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
@@ -323,9 +377,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspect" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/7a/702612a2b5e3335722395d6de71206549f64a43588527f411ff60a7c3456/pandera-0.33.1.tar.gz", hash = "sha256:909e2e269a3f9c17d94c11268f92a5f48e889af633ea1414053993874d613626", size = 976019, upload-time = "2026-09-01T15:56:07.34Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/56/6c86add6272b295ea77f629757c6d79a12ec30ac51e01a0428d6ff11224c/pandera-0.34.1.tar.gz", hash = "sha256:8907a976403757c5e05a73022d4c447c74844d01c6053667b9a2ca63f26c2fa6", size = 1066371, upload-time = "2026-10-06T15:16:29.118Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/84/107a480f7aa34a6878fb4fb85cda66f37e8aaee769c5917e3eaa2d55222e/pandera-0.33.1-py3-none-any.whl", hash = "sha256:8283bc12f7c85f0b429107d71b55150205f7e5ca59d68117aff971273a3bd2d8", size = 501976, upload-time = "2026-09-01T15:56:05.944Z" },
+    { url = "https://files.pythonhosted.org/packages/53/e2/f86fdba3312c977beb39e7c3b29d1cdb43c508ed8278ff40aa329aa10611/pandera-0.34.1-py3-none-any.whl", hash = "sha256:fbcbd0aafeb8d69d7db0ab7990e89cbea31c2c5b8a5e9bde8b3a33f8678975a4", size = 535038, upload-time = "2026-10-06T15:16:27.372Z" },
 ]
 
 [[package]]
@@ -377,60 +431,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/06/8f/d741afb1dcd1848161189e017d27972e7e78556d8dce66b94d4235093706/polars_runtime_32-1.44.2-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:c4a09fb14aad711526346efc0cb2015c2fd0555ce4118b6524e5debbaea65ff5", size = 49887654, upload-time = "2026-09-09T07:40:37.455Z" },
     { url = "https://files.pythonhosted.org/packages/ba/e7/c61c1c7eea37705920fe7c1302d1dd80d1165db2b928f0da3eae6d1ebb75/polars_runtime_32-1.44.2-cp310-abi3-win_amd64.whl", hash = "sha256:8598e7a20efba70bb74978c7df7af7c606ff4d79b9b48fdd808250b189bc9a13", size = 51297967, upload-time = "2026-09-09T07:40:41.993Z" },
     { url = "https://files.pythonhosted.org/packages/e7/a0/d0dd0d2ec95fa328dd47055905fae53ba3cd79f11c8973326ebe75a49e4c/polars_runtime_32-1.44.2-cp310-abi3-win_arm64.whl", hash = "sha256:d51040d3ab40157f6db3c62be59cab5b80fb3c8d158924769c4982a1c8eef730", size = 44303345, upload-time = "2026-09-09T07:40:47.081Z" },
-]
-
-[[package]]
-name = "dfshrink"
-version = "0.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "polars" },
-]
-
-[package.optional-dependencies]
-dataframely = [
-    { name = "dataframely" },
-]
-pandera = [
-    { name = "pandera" },
-]
-patito = [
-    { name = "patito" },
-]
-validators = [
-    { name = "dataframely" },
-    { name = "pandera" },
-    { name = "patito" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "hypothesis" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dataframely", marker = "extra == 'dataframely'", specifier = ">=3" },
-    { name = "dataframely", marker = "extra == 'validators'", specifier = ">=3" },
-    { name = "pandera", marker = "extra == 'pandera'", specifier = ">=0.22" },
-    { name = "pandera", marker = "extra == 'validators'", specifier = ">=0.22" },
-    { name = "patito", marker = "extra == 'patito'", specifier = ">=0.8.6" },
-    { name = "patito", marker = "extra == 'validators'", specifier = ">=0.8.6" },
-    { name = "polars", specifier = ">=1.44.2" },
-]
-provides-extras = ["dataframely", "pandera", "patito", "validators"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "hypothesis", specifier = ">=6.168.2" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "ruff", specifier = ">=0.16.9" },
-    { name = "ty", specifier = ">=0.0.84" },
 ]
 
 [[package]]
